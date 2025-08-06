@@ -43,7 +43,6 @@ import {
   IconBulb,
   IconPencilPlus,
   IconRobot,
-  IconMagicWand,
   IconAutomation,
 } from "@tabler/icons-react";
 import { generateText } from "ai";
@@ -92,6 +91,26 @@ interface InlineAIState {
   position: { x: number; y: number };
   currentBlock: Block | null;
   query: string;
+}
+
+// Template interfaces - Fixed to include all required properties
+interface AITemplate {
+  title: string;
+  description: string;
+  type: string;
+  color: string;
+  icon: React.ForwardRefExoticComponent<any>;
+  defaultPrompt: string;
+  behavior: string;
+}
+
+interface AIAutoTemplate {
+  title: string;
+  description: string;
+  type: string;
+  color: string;
+  icon: React.ForwardRefExoticComponent<any>;
+  behavior: string;
 }
 
 // Main component
@@ -196,8 +215,8 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     },
   }));
 
-  // AI Templates - Only 3 modes
-  const aiTemplates = [
+  // AI Templates - Only 3 modes - FIXED with proper typing
+  const aiTemplates: AITemplate[] = [
     {
       title: "Buat Struktur ",
       description: " Outline lengkap dengan heading dan sub-heading ",
@@ -210,6 +229,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     {
       title: "Isi Konten ",
       description: " Konten detail dan mendalam untuk topik",
+      type: "content",
       color: "green",
       icon: IconEdit,
       defaultPrompt: "Tulis konten detail tentang",
@@ -226,8 +246,8 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     }
   ];
 
-  // AI Auto Templates - NEW: AI Otomatis tanpa prompt
-  const aiAutoTemplates = [
+  // AI Auto Templates - NEW: AI Otomatis tanpa prompt - FIXED with proper typing
+  const aiAutoTemplates: AIAutoTemplate[] = [
     {
       title: "Buat Struktur",
       description: " Outline lengkap dengan heading dan sub-heading",
@@ -1677,7 +1697,7 @@ INSTRUKSI:
     
     return [
       {
-        title: "Penyusun Artikel Cerdas",
+        title: "Ai dengan Prompt (Input Konteks)",
         onItemClick: () => {
           // Save cursor position saat slash menu diklik
           const cursorPosition = editor.getTextCursorPosition();
@@ -1694,7 +1714,7 @@ INSTRUKSI:
         icon: <IconPencilPlus size={18} />,
       },
       {
-        title: "AI Penulis Interaktif",
+        title: "AI tanpa Prompt (Otomatis)",
         onItemClick: () => {
           // Save cursor position saat slash menu diklik
           const cursorPosition = editor.getTextCursorPosition();
@@ -2041,20 +2061,6 @@ INSTRUKSI:
                 </Paper>
               )}
 
-              {/* Auto Mode Info
-              {aiMode === "auto" && (
-                <Paper p="lg" radius="md" bg="">
-                  <Stack gap="md">
-                    <Text fw={500} size="md" c="grey">
-                      🤖 AI Otomatis - Tidak Perlu Prompt!
-                    </Text>
-                    <Text size="sm" c="grey">
-                      AI akan secara otomatis menganalisis konten yang ada di editor dan membuat konten yang sesuai tanpa perlu input prompt dari Anda.
-                    </Text>
-                  </Stack>
-                </Paper>
-              )} */}
-
               {/* Info untuk AI Lanjutan */}
               {aiMode === "continue" && (
                 <Paper p="lg" radius="md" bg="blue.0">
@@ -2108,7 +2114,7 @@ INSTRUKSI:
                           handleAIAutoGeneration(template.type, template.behavior);
                         } else {
                           // Manual mode - need prompt
-                          const finalPrompt = prompt.trim() || template.defaultPrompt;
+                          const finalPrompt = prompt.trim() || ('defaultPrompt' in template ? template.defaultPrompt : "Generate content");
                           handleAIGeneration(finalPrompt, template.type, template.behavior);
                         }
                       }}
