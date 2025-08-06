@@ -42,6 +42,9 @@ import {
   IconFileText,
   IconBulb,
   IconPencilPlus,
+  IconRobot,
+  IconMagicWand,
+  IconAutomation,
 } from "@tabler/icons-react";
 import { generateText } from "ai";
 import React, { forwardRef, useCallback, useImperativeHandle } from "react";
@@ -104,7 +107,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
   const [aiModalOpened, { open: openAIModal, close: closeAIModal }] = useDisclosure(false);
   const [prompt, setPrompt] = React.useState("");
   const [generatedContent, setGeneratedContent] = React.useState("");
-  const [aiMode, setAIMode] = React.useState<"new" | "continue">("new");
+  const [aiMode, setAIMode] = React.useState<"new" | "continue" | "auto">("new");
   const [isAutoContinuing, setIsAutoContinuing] = React.useState(false);
   const [currentAIType, setCurrentAIType] = React.useState<string>("structure"); // Track current AI type
   const [savedCursorPosition, setSavedCursorPosition] = React.useState<Block | null>(null); // Save cursor position
@@ -196,8 +199,8 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
   // AI Templates - Only 3 modes
   const aiTemplates = [
     {
-      title: "Buat Struktur Sub-bab Awal",
-      description: "(ini akan menghapus dan merubah semua struktur yang ada)",
+      title: "Buat Struktur ",
+      description: " Outline lengkap dengan heading dan sub-heading ",
       type: "structure",
       color: "blue", 
       icon: IconList,
@@ -205,22 +208,49 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       behavior: "rewrite" // Will replace all content
     },
     {
-      title: "Isi Konten Subbab",
-      description: "(ini akan mengisi / menambahkan 1 konten blok, bukan menghapus yang sebelumnya)",
-      type: "content", 
+      title: "Isi Konten ",
+      description: " Konten detail dan mendalam untuk topik",
       color: "green",
       icon: IconEdit,
       defaultPrompt: "Tulis konten detail tentang",
       behavior: "content_cursor" // Will add content under current heading
     },
     {
-      title: "Lanjutkan Kalimat di Paragraf",
-      description: "(ini akan mengisi / menambahkan 1 kalimat yang dimana cursor sedang aktif)",
+      title: "Lanjutkan Kalimat",
+      description: " Melanjutkan kalimat atau paragraf yang sudah ada ",
       type: "sentence",
       color: "orange",
       icon: IconPencilPlus,
       defaultPrompt: "Lanjutkan tulisan yang sudah ada",
       behavior: "cursor" // Will add at cursor position
+    }
+  ];
+
+  // AI Auto Templates - NEW: AI Otomatis tanpa prompt
+  const aiAutoTemplates = [
+    {
+      title: "Buat Struktur",
+      description: " Outline lengkap dengan heading dan sub-heading",
+      type: "structure",
+      color: "blue", 
+      icon: IconList,
+      behavior: "rewrite"
+    },
+    {
+      title: "Buat Isi Konten",
+      description: "(otomatis tanpa prompt - mengisi konten di heading aktif)",
+      type: "content", 
+      color: "green",
+      icon: IconEdit,
+      behavior: "add"
+    },
+    {
+      title: "Lanjutkan Kalimat",
+      description: "Melanjutkan kalimat atau paragraf yang sudah ada",
+      type: "sentence",
+      color: "orange",
+      icon: IconPencilPlus,
+      behavior: "add"
     }
   ];
 
@@ -386,7 +416,245 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     setSavedCursorPosition(null); // Reset saved cursor position
   };
 
-  // Handle AI generation
+  // NEW: Handle AI Auto Generation - tanpa prompt
+  const handleAIAutoGeneration = async (type: string = "structure", behavior: string = "rewrite") => {
+    if (!aiModel) {
+      alert("❌ AI model tidak tersedia. Silakan periksa konfigurasi API key.");
+      return;
+    }
+    
+    // Set current AI type untuk tracking
+    setCurrentAIType(type);
+    setAIMode("auto");
+    
+    // Save cursor position for content and sentence behavior
+    if (behavior === "add") {
+      const cursorPosition = editor.getTextCursorPosition();
+      if (cursorPosition) {
+        setSavedCursorPosition(cursorPosition.block);
+      }
+    }
+    
+    setIsAILoading(true);
+    
+    try {
+      let systemPrompt = "";
+      const editorBlocks = editor.document;
+      let contextContent = "";
+      
+      // Extract current content for context
+      editorBlocks.forEach(block => {
+        const text = extractTextFromBlock(block);
+        if (text) {
+          if (block.type === "heading") {
+            const level = (block.props as { level?: number })?.level || 1;
+            const headingPrefix = '#'.repeat(level);
+            contextContent += `\n${headingPrefix} ${text}\n`;
+          } else {
+            contextContent += `${text}\n`;
+          }
+        }
+      });
+
+      // Generate automatic prompts based on context
+      switch (type) {
+        case "structure":
+          if (contextContent.trim()) {
+            // Ada konten existing - analisis untuk buat struktur yang lebih baik
+            systemPrompt = `Analisis konten berikut dan buat struktur outline yang lebih baik dan terorganisir:
+
+KONTEN YANG ADA:
+${contextContent}
+
+TUGAS ANDA:
+1. Analisis topik utama dari konten yang ada
+2. Buat struktur heading yang lebih terorganisir dan logis
+3. Perbaiki hierarki informasi jika diperlukan
+
+ATURAN STRUKTUR:
+- Gunakan # untuk judul utama (hanya 1)
+- Gunakan ## untuk bab-bab utama (level 2)
+- Gunakan ### untuk sub-bab (level 3)
+- Gunakan #### untuk detail bagian (level 4)
+
+INSTRUKSI PENTING:
+- HANYA tulis heading dan subheading
+- JANGAN tulis konten paragraf apapun
+- Buat struktur yang komprehensif berdasarkan analisis konten existing
+- Struktur ini akan mengganti semua konten yang ada
+
+Buat outline struktur yang lebih baik dari konten yang sudah ada.`;
+          } else {
+            // Tidak ada konten - buat struktur umum
+            systemPrompt = `Buat struktur outline artikel umum yang komprehensif dan berguna.
+
+TUGAS: Buat struktur artikel yang bisa digunakan untuk berbagai topik umum.
+
+ATURAN STRUKTUR:
+- Gunakan # untuk judul utama
+- Gunakan ## untuk bab-bab utama
+- Gunakan ### untuk sub-bab
+- Gunakan #### untuk detail bagian
+
+INSTRUKSI:
+- HANYA tulis heading dan subheading
+- JANGAN tulis konten paragraf
+- Buat struktur yang fleksibel dan dapat disesuaikan
+- Fokus pada struktur yang logis dan mudah dipahami
+
+Contoh struktur yang baik mencakup: Pendahuluan, Pembahasan Utama, Analisis, Kesimpulan, dll.`;
+          }
+          break;
+
+        case "content":
+          // Auto content generation berdasarkan heading aktif
+          const cursorPosition = editor.getTextCursorPosition();
+          let currentHeading = "";
+          let headingLevel = 1;
+          
+          if (cursorPosition) {
+            const allBlocks = editor.document;
+            const currentIndex = allBlocks.findIndex(block => block.id === cursorPosition.block.id);
+            
+            // Find the governing heading by looking backwards
+            for (let i = currentIndex; i >= 0; i--) {
+              const block = allBlocks[i];
+              if (block.type === "heading") {
+                currentHeading = extractTextFromBlock(block);
+                headingLevel = (block.props as { level?: number })?.level || 1;
+                break;
+              }
+            }
+          }
+
+          if (currentHeading) {
+            systemPrompt = `Buat konten detail untuk heading berikut secara otomatis:
+
+STRUKTUR DOKUMEN SAAT INI:
+${contextContent}
+
+HEADING YANG SEDANG AKTIF: ${currentHeading} (Level ${headingLevel})
+
+TUGAS OTOMATIS:
+- Analisis heading "${currentHeading}" dan buat konten yang relevan
+- Tulis konten detail dan informatif yang sesuai dengan level heading
+- Sesuaikan kedalaman konten dengan hierarki heading
+- Berikan informasi yang valuable dan comprehensive
+
+INSTRUKSI:
+- Tulis 2-4 paragraf konten yang mendalam
+- JANGAN tulis ulang heading atau struktur
+- HANYA tulis konten paragraf yang akan ditempatkan di bawah heading aktif
+- Pastikan konten informatif, accurate, dan well-structured
+- Gunakan bahasa Indonesia yang natural dan professional
+
+Buat konten otomatis untuk heading "${currentHeading}".`;
+          } else {
+            systemPrompt = `Buat konten paragraf yang relevan berdasarkan konteks editor saat ini:
+
+KONTEKS DOKUMEN:
+${contextContent || "(Editor masih kosong)"}
+
+TUGAS OTOMATIS:
+- Analisis konteks yang ada dan buat konten yang melengkapi
+- Jika editor kosong, buat konten paragraf pembuka yang umum dan menarik
+- Tulis konten yang informatif dan valuable
+
+INSTRUKSI:
+- Tulis 2-3 paragraf konten yang substantial
+- Gunakan bahasa Indonesia yang natural
+- Berikan informasi yang berguna dan relevan
+- HANYA tulis konten paragraf, tidak ada heading
+
+Buat konten otomatis yang sesuai dengan konteks.`;
+          }
+          break;
+
+        case "sentence":
+          // Auto sentence continuation
+          const sentenceContext = analyzeCurrentCursorContext();
+          
+          if (sentenceContext) {
+            const { contextType, currentText, precedingContext, targetHeading } = sentenceContext;
+            
+            systemPrompt = `Lanjutkan tulisan secara otomatis dari konteks berikut:
+
+KONTEKS SEBELUMNYA:
+${precedingContext}
+
+TEKS SAAT INI: ${currentText}
+
+INFORMASI KONTEKS:
+- Tipe konteks: ${contextType}
+- Heading terkait: ${targetHeading?.text || "Tidak ada"}
+
+TUGAS OTOMATIS MELANJUTKAN:
+- Analisis alur pemikiran dari kalimat/paragraf terakhir
+- Lanjutkan dengan natural dan logis tanpa mengulang informasi
+- Pertahankan kohesi dan koherensi dengan tulisan sebelumnya
+- Kembangkan ide yang sudah dimulai dengan informasi baru
+- Berikan penjelasan yang mendalam dan substantial
+
+INSTRUKSI:
+- Tulis 2-4 paragraf tambahan yang bermakna
+- Jaga konsistensi tone dan style dengan tulisan sebelumnya
+- Berikan value yang jelas dan informasi yang berguna
+- Pastikan transisi yang smooth dari kalimat terakhir
+- Gunakan bahasa Indonesia yang natural dan flowing
+
+Lanjutkan tulisan secara otomatis dengan mengikuti alur yang sudah ada.`;
+          } else {
+            systemPrompt = `Lanjutkan tulisan dari konteks editor berikut:
+
+KONTEKS:
+${contextContent || "(Tidak ada konteks khusus)"}
+
+TUGAS: Lanjutkan dengan konten yang relevan dan natural.
+
+INSTRUKSI:
+- Tulis 2-3 paragraf yang melengkapi konteks
+- Gunakan bahasa Indonesia yang natural
+- Berikan informasi yang valuable`;
+          }
+          break;
+
+        default:
+          systemPrompt = `Buat konten yang relevan berdasarkan konteks editor saat ini:
+
+KONTEKS:
+${contextContent}
+
+INSTRUKSI:
+- Analisis konteks dan buat konten yang sesuai
+- Gunakan bahasa Indonesia yang natural
+- Berikan informasi yang valuable dan informatif`;
+      }
+
+      const { text } = await generateText({
+        model: aiModel,
+        prompt: systemPrompt,
+        maxTokens: type === "structure" ? 1000 : type === "content" ? 2000 : 1500,
+        temperature: 0.7,
+        presencePenalty: 0.1,
+        frequencyPenalty: 0.1,
+      });
+      
+      if (text && text.trim()) {
+        setGeneratedContent(text);
+        openAIModal(); // Show modal with generated content
+      } else {
+        alert("⚠️ AI tidak menghasilkan konten. Silakan coba lagi.");
+      }
+      
+    } catch (error) {
+      console.error("AI auto generation failed:", error);
+      alert("❌ Gagal menghasilkan konten AI otomatis. Silakan coba lagi.");
+    } finally {
+      setIsAILoading(false);
+    }
+  };
+
+  // Handle AI generation (existing function)
   const handleAIGeneration = async (inputPrompt: string, type: string = "structure", behavior: string = "rewrite") => {
     if (!inputPrompt.trim()) {
       alert("⚠️ Silakan masukkan topik atau kata kunci sebelum generate konten!");
@@ -406,9 +674,6 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     
     await generateAIContent(inputPrompt, type);
   };
-
-  // Handle inline AI trigger - REMOVED (not used anymore)
-  // const handleInlineAITrigger = ... (removed)
 
   // Analyze cursor context - Enhanced version
   const analyzeCurrentCursorContext = (): CursorContext | null => {
@@ -1172,7 +1437,7 @@ INSTRUKSI:
     }
   };
 
-  // Insert content to editor - Enhanced with content_cursor behavior
+  // Insert content to editor - Enhanced with content_cursor behavior and auto behavior
   const insertContentToEditor = async (behavior: string = "rewrite") => {
     if (!generatedContent || !generatedContent.trim()) {
       console.warn("No generated content to insert");
@@ -1256,86 +1521,141 @@ INSTRUKSI:
             break;
 
           case "content_cursor":
-  // Insert content under current heading (untuk mode content)
-  try {
-    let targetBlock = savedCursorPosition;
-    if (!targetBlock) {
-      const cursorPosition = editor.getTextCursorPosition();
-      targetBlock = cursorPosition?.block || null;
-    }
-    
-    if (targetBlock) {
-      // Find the current heading or closest heading before cursor
-      const allBlocks = editor.document;
-      const currentIndex = allBlocks.findIndex(block => block.id === targetBlock.id);
-      
-      let headingIndex = currentIndex;
-      
-      // If current block is not a heading, find the previous heading
-      if (targetBlock.type !== "heading") {
-        for (let i = currentIndex; i >= 0; i--) {
-          if (allBlocks[i].type === "heading") {
-            headingIndex = i;
-            break;
-          }
-        }
-      }
-      
-      const headingBlock = allBlocks[headingIndex];
-      
-      // Find where to insert (RIGHT AFTER heading, not at the end of existing content)
-      let insertIndex = headingIndex; // Start from heading position
-      
-      // PERBAIKAN: Insert langsung setelah heading, bukan setelah semua content
-      const insertAfterBlock = allBlocks[insertIndex]; // Langsung gunakan heading block
-      
-      console.log("Inserting after heading:", extractTextFromBlock(insertAfterBlock));
-      
-      await editor.insertBlocks(blocksToInsert, insertAfterBlock, "after");
-      
-      // PERBAIKAN CURSOR POSITIONING: Set cursor ke block PERTAMA yang baru di-insert
-      setTimeout(() => {
-        try {
-          const newAllBlocks = editor.document;
-          const newHeadingIndex = newAllBlocks.findIndex(block => block.id === insertAfterBlock.id);
-          const firstInsertedIndex = newHeadingIndex + 1; // Block pertama setelah heading
-          
-          if (firstInsertedIndex < newAllBlocks.length) {
-            const firstInsertedBlock = newAllBlocks[firstInsertedIndex];
-            if (firstInsertedBlock) {
-              console.log("Setting cursor to first inserted block:", extractTextFromBlock(firstInsertedBlock));
-              editor.setTextCursorPosition(firstInsertedBlock, "start"); // ← UBAH DARI "end" KE "start"
+            // Insert content under current heading (untuk mode content)
+            try {
+              let targetBlock = savedCursorPosition;
+              if (!targetBlock) {
+                const cursorPosition = editor.getTextCursorPosition();
+                targetBlock = cursorPosition?.block || null;
+              }
+              
+              if (targetBlock) {
+                // Find the current heading or closest heading before cursor
+                const allBlocks = editor.document;
+                const currentIndex = allBlocks.findIndex(block => block.id === targetBlock.id);
+                
+                let headingIndex = currentIndex;
+                
+                // If current block is not a heading, find the previous heading
+                if (targetBlock.type !== "heading") {
+                  for (let i = currentIndex; i >= 0; i--) {
+                    if (allBlocks[i].type === "heading") {
+                      headingIndex = i;
+                      break;
+                    }
+                  }
+                }
+                
+                const headingBlock = allBlocks[headingIndex];
+                
+                // Find where to insert (RIGHT AFTER heading, not at the end of existing content)
+                let insertIndex = headingIndex; // Start from heading position
+                
+                // Insert langsung setelah heading, bukan setelah semua content
+                const insertAfterBlock = allBlocks[insertIndex]; // Langsung gunakan heading block
+                
+                console.log("Inserting after heading:", extractTextFromBlock(insertAfterBlock));
+                
+                await editor.insertBlocks(blocksToInsert, insertAfterBlock, "after");
+                
+                // Set cursor ke block PERTAMA yang baru di-insert
+                setTimeout(() => {
+                  try {
+                    const newAllBlocks = editor.document;
+                    const newHeadingIndex = newAllBlocks.findIndex(block => block.id === insertAfterBlock.id);
+                    const firstInsertedIndex = newHeadingIndex + 1; // Block pertama setelah heading
+                    
+                    if (firstInsertedIndex < newAllBlocks.length) {
+                      const firstInsertedBlock = newAllBlocks[firstInsertedIndex];
+                      if (firstInsertedBlock) {
+                        console.log("Setting cursor to first inserted block:", extractTextFromBlock(firstInsertedBlock));
+                        editor.setTextCursorPosition(firstInsertedBlock, "start");
+                      }
+                    }
+                  } catch (e) {
+                    console.log("Cursor positioning adjustment:", e);
+                  }
+                }, 150);
+              } else {
+                // Fallback: insert di akhir jika tidak ada cursor position
+                const lastBlock = editor.document[editor.document.length - 1];
+                await editor.insertBlocks(blocksToInsert, lastBlock, "after");
+                
+                // Set cursor ke block pertama yang di-insert
+                setTimeout(() => {
+                  const newAllBlocks = editor.document;
+                  const lastBlockIndex = newAllBlocks.findIndex(block => block.id === lastBlock.id);
+                  const firstNewBlockIndex = lastBlockIndex + 1;
+                  if (firstNewBlockIndex < newAllBlocks.length) {
+                    const firstNewBlock = newAllBlocks[firstNewBlockIndex];
+                    if (firstNewBlock) {
+                      editor.setTextCursorPosition(firstNewBlock, "start");
+                    }
+                  }
+                }, 150);
+              }
+            } catch (error) {
+              console.error("Error inserting at content cursor position:", error);
+              // Fallback: insert di akhir
+              const lastBlock = editor.document[editor.document.length - 1];
+              await editor.insertBlocks(blocksToInsert, lastBlock, "after");
             }
-          }
-        } catch (e) {
-          console.log("Cursor positioning adjustment:", e);
-        }
-      }, 150); // ← TAMBAH DELAY SEDIKIT DARI 100ms KE 150ms
-    } else {
-      // Fallback: insert di akhir jika tidak ada cursor position
-      const lastBlock = editor.document[editor.document.length - 1];
-      await editor.insertBlocks(blocksToInsert, lastBlock, "after");
-      
-      // Set cursor ke block pertama yang di-insert
-      setTimeout(() => {
-        const newAllBlocks = editor.document;
-        const lastBlockIndex = newAllBlocks.findIndex(block => block.id === lastBlock.id);
-        const firstNewBlockIndex = lastBlockIndex + 1;
-        if (firstNewBlockIndex < newAllBlocks.length) {
-          const firstNewBlock = newAllBlocks[firstNewBlockIndex];
-          if (firstNewBlock) {
-            editor.setTextCursorPosition(firstNewBlock, "start");
-          }
-        }
-      }, 150);
-    }
-  } catch (error) {
-    console.error("Error inserting at content cursor position:", error);
-    // Fallback: insert di akhir
-    const lastBlock = editor.document[editor.document.length - 1];
-    await editor.insertBlocks(blocksToInsert, lastBlock, "after");
-  }
-  break;
+            break;
+
+          case "add":
+            // NEW: Add behavior untuk AI Auto mode
+            try {
+              let targetBlock = savedCursorPosition;
+              if (!targetBlock) {
+                const cursorPosition = editor.getTextCursorPosition();
+                targetBlock = cursorPosition?.block || null;
+              }
+              
+              if (targetBlock) {
+                await editor.insertBlocks(blocksToInsert, targetBlock, "after");
+                
+                // Set cursor ke block pertama yang baru di-insert
+                setTimeout(() => {
+                  try {
+                    const newAllBlocks = editor.document;
+                    const targetIndex = newAllBlocks.findIndex(block => block.id === targetBlock!.id);
+                    const firstInsertedIndex = targetIndex + 1;
+                    
+                    if (firstInsertedIndex < newAllBlocks.length) {
+                      const firstInsertedBlock = newAllBlocks[firstInsertedIndex];
+                      if (firstInsertedBlock) {
+                        editor.setTextCursorPosition(firstInsertedBlock, "start");
+                      }
+                    }
+                  } catch (e) {
+                    console.log("Cursor positioning adjustment:", e);
+                  }
+                }, 150);
+              } else {
+                // Fallback: insert di akhir jika tidak ada cursor position
+                const lastBlock = editor.document[editor.document.length - 1];
+                await editor.insertBlocks(blocksToInsert, lastBlock, "after");
+                
+                // Set cursor ke block pertama yang di-insert
+                setTimeout(() => {
+                  const newAllBlocks = editor.document;
+                  const lastBlockIndex = newAllBlocks.findIndex(block => block.id === lastBlock.id);
+                  const firstNewBlockIndex = lastBlockIndex + 1;
+                  if (firstNewBlockIndex < newAllBlocks.length) {
+                    const firstNewBlock = newAllBlocks[firstNewBlockIndex];
+                    if (firstNewBlock) {
+                      editor.setTextCursorPosition(firstNewBlock, "start");
+                    }
+                  }
+                }, 150);
+              }
+            } catch (error) {
+              console.error("Error inserting at add position:", error);
+              // Fallback: insert di akhir
+              const lastBlock = editor.document[editor.document.length - 1];
+              await editor.insertBlocks(blocksToInsert, lastBlock, "after");
+            }
+            break;
 
           default:
             // Default to add behavior
@@ -1351,7 +1671,7 @@ INSTRUKSI:
     }
   };
 
-  // Custom AI Slash Menu Items - ONLY ONE ITEM
+  // Custom AI Slash Menu Items - NOW TWO ITEMS: Manual dan Auto
   const getCustomAISlashMenuItems = React.useMemo(() => {
     if (!aiModel) return [];
     
@@ -1370,8 +1690,25 @@ INSTRUKSI:
         },
         aliases: ["generate", "write", "tulis", "ai", "assistant", "ask", "help", "continue", "lanjut", "sentence", "struktur", "konten"],
         group: "AI Tools",
-        subtext: "Struktur, Konten & Lanjutkan Kalimat - Semua dalam Satu",
-        icon: <IconSparkles size={18} />,
+        subtext: "Struktur & Konten Otomatis",
+        icon: <IconPencilPlus size={18} />,
+      },
+      {
+        title: "AI Penulis Interaktif",
+        onItemClick: () => {
+          // Save cursor position saat slash menu diklik
+          const cursorPosition = editor.getTextCursorPosition();
+          if (cursorPosition) {
+            setSavedCursorPosition(cursorPosition.block);
+          }
+          setAIMode("auto");
+          setCurrentAIType("structure");
+          openAIModal();
+        },
+        aliases: ["auto", "otomatis", "automatic", "smart", "cerdas", "instant", "langsung"],
+        group: "AI Tools",
+        subtext: "Tanya Jawab, Tulis, dan Ringkas Otomatis",
+        icon: <IconSparkles size={18} />
       }
     ];
   }, [aiModel, openAIModal, editor]);
@@ -1648,11 +1985,17 @@ INSTRUKSI:
         onClose={closeModalAndReset}
         title={
           <Group gap="md">
-            <ThemeIcon size="lg" gradient={{ from: 'blue', to: 'cyan' }} variant="gradient">
-              <IconSparkles size={20} />
+            <ThemeIcon 
+              size="lg" 
+              gradient={aiMode === "auto" ? { from: 'blue', to: 'cyan' } : { from: 'blue', to: 'cyan' }} 
+              variant="gradient"
+            >
+              {aiMode === "auto" ? <IconSparkles size={20} /> : <IconSparkles size={20} />}
             </ThemeIcon>
             <Text fw={700} size="xl">
-              {aiMode === "continue" ? " AI Lanjutan Konten" : " Pembuatan Struktur & Konten Artikel Ototomatis"}
+              {aiMode === "continue" ? " AI Lanjutan Konten" : 
+               aiMode === "auto" ? " AI Otomatis - Tanpa Prompt" :
+               " Pembuatan Struktur & Konten Artikel Otomatis"}
             </Text>
           </Group>
         }
@@ -1668,33 +2011,49 @@ INSTRUKSI:
         <Stack gap="xl">
           {!generatedContent ? (
             <>
-              {/* Prompt Input */}
-              <Paper p="lg" radius="md" bg={computedColorScheme === "dark" ? "dark.6" : "gray.1"}>
-                <Stack gap="md">
-                  <Text fw={500} size="md">
-                    💡 Topik atau Kata Kunci
-                  </Text>
-                  <Textarea
-                    placeholder="Masukkan topik untuk struktur, konten spesifik yang ingin ditambahkan, atau konteks untuk melanjutkan kalimat."
-                    value={prompt}
-                    onChange={(event) => setPrompt(event.currentTarget.value)}
-                    minRows={3}
-                    maxRows={6}
-                    autosize
-                    size="md"
-                    styles={{
-                      input: {
-                        fontSize: '14px',
-                        lineHeight: 1.5,
-                        border: `1px solid ${computedColorScheme === "dark" ? "#495057" : "#ced4da"}`,
-                      }
-                    }}
-                  />
-                  <Text size="sm" c="dimmed">
-                    Pilih mode AI di bawah: Struktur , Konten , atau Lanjutkan Kalimat .
-                  </Text>
-                </Stack>
-              </Paper>
+              {/* Prompt Input - ONLY show for non-auto modes */}
+              {aiMode !== "auto" && (
+                <Paper p="lg" radius="md" bg={computedColorScheme === "dark" ? "dark.6" : "gray.1"}>
+                  <Stack gap="md">
+                    <Text fw={500} size="md">
+                      💡 Topik atau Kata Kunci
+                    </Text>
+                    <Textarea
+                      placeholder="Untuk mode 'Struktur' - jelaskan topik secara umum . Untuk mode 'Konten' - masukkan bab/sub bab spesifik. Untuk mode 'Kalimat' - berikan konteks atau arah lanjutan "
+                      value={prompt}
+                      onChange={(event) => setPrompt(event.currentTarget.value)}
+                      minRows={3}
+                      maxRows={6}
+                      autosize
+                      size="md"
+                      styles={{
+                        input: {
+                          fontSize: '14px',
+                          lineHeight: 1.5,
+                          border: `1px solid ${computedColorScheme === "dark" ? "#495057" : "#ced4da"}`,
+                        }
+                      }}
+                    />
+                    <Text size="sm" c="dimmed">
+                     Untuk mode "Struktur" - jelaskan topik secara umum. Untuk mode "Konten" - masukkan bab/sub bab spesifik. Untuk mode "Kalimat" - berikan konteks atau arah lanjutan tulisan.
+                    </Text>
+                  </Stack>
+                </Paper>
+              )}
+
+              {/* Auto Mode Info
+              {aiMode === "auto" && (
+                <Paper p="lg" radius="md" bg="">
+                  <Stack gap="md">
+                    <Text fw={500} size="md" c="grey">
+                      🤖 AI Otomatis - Tidak Perlu Prompt!
+                    </Text>
+                    <Text size="sm" c="grey">
+                      AI akan secara otomatis menganalisis konten yang ada di editor dan membuat konten yang sesuai tanpa perlu input prompt dari Anda.
+                    </Text>
+                  </Stack>
+                </Paper>
+              )} */}
 
               {/* Info untuk AI Lanjutan */}
               {aiMode === "continue" && (
@@ -1713,7 +2072,7 @@ INSTRUKSI:
               {/* AI Templates Grid */}
               <Stack gap="md">
                 <Text fw={500} size="lg" c="dimmed">
-                  Pilih mode AI yang diinginkan:
+                  {aiMode === "auto" ? "Pilih mode generate:" : "Pilih mode generate: "}
                 </Text>
                 
                 <SimpleGrid cols={aiMode === "continue" ? 1 : 3} spacing="lg">
@@ -1728,6 +2087,8 @@ INSTRUKSI:
                         defaultPrompt: "Lanjutkan dan lengkapi konten",
                         behavior: "add"
                       }];
+                    } else if (aiMode === "auto") {
+                      return aiAutoTemplates;
                     }
                     return aiTemplates;
                   })().map((template) => (
@@ -1742,8 +2103,14 @@ INSTRUKSI:
                         height: '200px', // Increased height for better visibility
                       }}
                       onClick={() => {
-                        const finalPrompt = prompt.trim() || template.defaultPrompt;
-                        handleAIGeneration(finalPrompt, template.type, template.behavior);
+                        if (aiMode === "auto") {
+                          // Auto mode - no prompt needed
+                          handleAIAutoGeneration(template.type, template.behavior);
+                        } else {
+                          // Manual mode - need prompt
+                          const finalPrompt = prompt.trim() || template.defaultPrompt;
+                          handleAIGeneration(finalPrompt, template.type, template.behavior);
+                        }
                       }}
                     >
                       <Stack gap="xs" align="center" justify="center" h="100%">
@@ -1761,15 +2128,15 @@ INSTRUKSI:
                         <Text size="xs" c="dimmed" ta="center" px="lg">
                           {template.description}
                         </Text>
-                        {                        /* Behavior indicator */}
-                        {/* <Badge 
-                          size="xs" 
-                          variant="light" 
-                          color={template.behavior === "rewrite" ? "red" : template.behavior === "content_cursor" ? "green" : "orange"}
-                        >
-                          {template.behavior === "rewrite" ? "Ganti Semua" : 
-                           template.behavior === "content_cursor" ? "Di Heading" : "Di Cursor"}
-                        </Badge> */}
+                        {/* Mode indicator for auto */}
+                        {aiMode === "auto" && (
+                          <Badge 
+                            size="xs" 
+                            variant="light" 
+                            color="purple"
+                          >
+                          </Badge>
+                        )}
                       </Stack>
                     </Card>
                   ))}
@@ -1778,14 +2145,14 @@ INSTRUKSI:
 
               {/* Loading State */}
               {isAILoading && (
-                <Paper p="lg" radius="md" bg="blue.0">
+                <Paper p="lg" radius="md" bg={aiMode === "auto" ? "blue.0" : "blue.0"}>
                   <Group gap="md" justify="center">
-                    <Loader size="md" color="blue" />
+                    <Loader size="md" color={aiMode === "auto" ? "blue" : "blue"} />
                     <Stack gap="xs" align="center">
-                      <Text size="md" c="blue" fw={500}>
-                        AI sedang membuat konten...
+                      <Text size="md" c={aiMode === "auto" ? "blue" : "blue"} fw={500}>
+                        AI sedang membuat konten{aiMode === "auto" ? " otomatis" : ""}...
                       </Text>
-                      <Text size="sm" c="blue">
+                      <Text size="sm" c={aiMode === "auto" ? "blue" : "blue"}>
                         Mohon tunggu sebentar
                       </Text>
                     </Stack>
@@ -1798,7 +2165,7 @@ INSTRUKSI:
             <Stack gap="md">
               <Group justify="space-between" align="center">
                 <div>
-                  <Text fw={600} size="lg" c="blue" component="span">
+                  <Text fw={600} size="lg" c={aiMode === "auto" ? "blue" : "blue"} component="span">
                     ✨ Konten Yang Dihasilkan
                   </Text>
                   {aiMode === "continue" && (
@@ -1806,8 +2173,13 @@ INSTRUKSI:
                       Mode Lanjutkan
                     </Badge>
                   )}
-                  {currentAIType && (
+                  {aiMode === "auto" && (
                     <Badge size="sm" color="blue" variant="light" ml="sm">
+                      Mode Otomatis
+                    </Badge>
+                  )}
+                  {currentAIType && (
+                    <Badge size="sm" color={aiMode === "auto" ? "blue" : "blue"} variant="light" ml="sm">
                       {currentAIType === "structure" ? "Struktur" : 
                        currentAIType === "content" ? "Konten" : "Kalimat"}
                     </Badge>
@@ -1856,13 +2228,13 @@ INSTRUKSI:
                 <Button
                   size="lg"
                   variant="gradient"
-                  gradient={{ from: 'blue', to: 'cyan' }}
+                  gradient={aiMode === "auto" ? { from: 'purple', to: 'violet' } : { from: 'blue', to: 'cyan' }}
                   leftSection={<IconPencil size={20} />}
                   onClick={() => {
                     const behaviorMap: { [key: string]: string } = {
                       "structure": "rewrite",
-                      "content": "content_cursor", 
-                      "sentence": "cursor"
+                      "content": currentAIType === "content" && aiMode === "auto" ? "add" : "content_cursor", 
+                      "sentence": currentAIType === "sentence" && aiMode === "auto" ? "add" : "cursor"
                     };
                     const behavior = behaviorMap[currentAIType] || "rewrite";
                     insertContentToEditor(behavior);
@@ -1873,7 +2245,9 @@ INSTRUKSI:
                   }}
                 >
                   {currentAIType === "structure" ? "Ganti Semua Struktur" :
+                   (currentAIType === "content" && aiMode === "auto") ? "Tambah Konten" :
                    currentAIType === "content" ? "Tambah di Heading" :
+                   (currentAIType === "sentence" && aiMode === "auto") ? "Tambah Kalimat" :
                    currentAIType === "sentence" ? "Tambah di Cursor" :
                    aiMode === "continue" ? "Tambahkan ke Editor" : "Masukkan ke Editor"}
                 </Button>
@@ -1885,7 +2259,9 @@ INSTRUKSI:
                   leftSection={<IconSparkles size={20} />}
                   onClick={() => {
                     setGeneratedContent("");
-                    setPrompt("");
+                    if (aiMode !== "auto") {
+                      setPrompt("");
+                    }
                   }}
                   style={{ 
                     height: '50px',
@@ -1900,8 +2276,10 @@ INSTRUKSI:
               <Paper p="md" radius="md" bg={computedColorScheme === "dark" ? "dark.7" : "gray.0"}>
                 <Text size="sm" c="dimmed" ta="center">
                   {currentAIType === "structure" && "⚠️ Mode Struktur akan mengganti semua konten yang ada dengan struktur baru"}
-                  {currentAIType === "content" && "📍 Mode Konten akan menambahkan konten di bawah heading/sub-heading saat ini"}
-                  {currentAIType === "sentence" && "📍 Mode Kalimat akan menambahkan konten di posisi cursor aktif"}
+                  {(currentAIType === "content" && aiMode === "auto") && "📍 Mode Konten Otomatis akan menambahkan konten di posisi cursor aktif"}
+                  {(currentAIType === "content" && aiMode !== "auto") && "📍 Mode Konten akan menambahkan konten di bawah heading/sub-heading saat ini"}
+                  {(currentAIType === "sentence" && aiMode === "auto") && "📍 Mode Kalimat Otomatis akan menambahkan konten di posisi cursor aktif"}
+                  {(currentAIType === "sentence" && aiMode !== "auto") && "📍 Mode Kalimat akan menambahkan konten di posisi cursor aktif"}
                 </Text>
               </Paper>
             </Stack>
