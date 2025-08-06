@@ -2133,7 +2133,7 @@ INSTRUKSI:
                           <Badge 
                             size="xs" 
                             variant="light" 
-                            color="purple"
+                            color="blue"
                           >
                           </Badge>
                         )}
@@ -2228,7 +2228,7 @@ INSTRUKSI:
                 <Button
                   size="lg"
                   variant="gradient"
-                  gradient={aiMode === "auto" ? { from: 'purple', to: 'violet' } : { from: 'blue', to: 'cyan' }}
+                  gradient={aiMode === "auto" ? { from: 'blue', to: 'cyan' } : { from: 'blue', to: 'cyan' }}
                   leftSection={<IconPencil size={20} />}
                   onClick={() => {
                     const behaviorMap: { [key: string]: string } = {
