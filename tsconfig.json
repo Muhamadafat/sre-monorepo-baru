@@ -1,0 +1,44 @@
+// D:\sre-monorepo\sre-monorepo\tsconfig.json
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true, // <- Penting: Root tsconfig tidak menghasilkan JS
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler", // Atau "node" tergantung versi Next.js/setup Anda
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      // Jika Anda menggunakan next/babel plugin atau sejenisnya di root
+    ],
+    "paths": {
+      // Alias untuk paket-paket monorepo Anda
+      "@sre-monorepo/lib": ["./packages/lib/src"],
+      "@sre-monorepo/lib/*": ["./packages/lib/src/*"],
+      "@sre-monorepo/components": ["./packages/components/src"],
+      "@sre-monorepo/components/*": ["./packages/components/src/*"]
+    },
+    // --- KRUSIAL untuk tipe kustom ---
+    "baseUrl": ".", // Untuk paths agar relatif terhadap root
+    "typeRoots": [
+      "./node_modules/@types",
+      "./packages/types/src" // Tambahkan folder tipe kustom Anda
+    ]
+    // ---------------------------------
+  },
+  "include": [
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "packages/types/**/*.d.ts" // Pastikan tipe kustom disertakan
+  ],
+  "exclude": ["node_modules", "dist"] // Kecualikan node_modules dan folder dist
+}

@@ -1,0 +1,36 @@
+{
+  "name": "sre-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "check-types": "turbo run check-types",
+    "db:generate": "npm -w @sre-monorepo/lib run prisma:generate",
+    "db:migrate:dev": "npm -w @sre-monorepo/lib run prisma:migrate:dev",
+    "db:push": "npm -w @sre-monorepo/lib run prisma:db:push",
+    "db:pull": "npm -w @sre-monorepo/lib run prisma:db:pull",
+    "db:studio": "npm -w @sre-monorepo/lib run prisma:studio",
+    "db:reset": "npm -w @sre-monorepo/lib run prisma:reset",
+
+    "build:main": "turbo run build --filter=main",
+    "build:brain": "turbo run build --filter=brain",
+    "start": "turbo run start",
+    "start:main": "cd apps/main && npm start",
+    "start:brain": "cd apps/brain && npm start"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.5",
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

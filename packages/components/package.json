@@ -1,0 +1,17 @@
+{
+  "name": "@sre-monorepo/components",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@mantine/core": "^8.1.3",
+    "@sre-monorepo/lib": "^1.0.0",
+    "@tabler/icons-react": "^3.34.0"
+  }
+}

@@ -1,0 +1,16 @@
+// D:\sre-monorepo\sre-monorepo\packages\types\tsconfig.json
+{
+  "extends": "../../tsconfig.json", // Ini penting agar mewarisi root config
+  "compilerOptions": {
+    "composite": true, // Tetapkan sebagai proyek komposit
+    "declaration": true, // Pastikan file .d.ts dibuat (meskipun kita sudah punya)
+    "emitDeclarationOnly": true, // Penting: Jangan hasilkan file .js
+    "outDir": "dist", // Meskipun tidak akan dipakai, diperlukan oleh composite
+    "rootDir": "src",
+    "noEmit": false, // Izinkan emit deklarasi
+    "baseUrl": ".",
+    "paths": {} // Kosongkan paths di sini, gunakan dari root
+  },
+  "include": ["src"], // Hanya sertakan folder src yang berisi .d.ts
+  "exclude": ["node_modules", "dist"]
+}

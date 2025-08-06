@@ -1,0 +1,37 @@
+{
+  "name": "brain",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --no-lint",
+    "lint": "next lint",
+    "start:brain": "next start -p 6002"
+  },
+  "dependencies": {
+    "@citation-js/core": "^0.7.18",
+    "@citation-js/plugin-ris": "^0.7.18",
+    "@sre-monorepo/components": "^1.0.0",
+    "@sre-monorepo/lib": "^1.0.0",
+    "busboy": "^1.6.0",
+    "next": "15.4.2",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "react-markdown": "^10.1.0",
+    "react-pdf-highlighter": "^8.0.0-rc.0",
+    "remark-gfm": "^4.0.1",
+    "vis-network": "^10.0.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/busboy": "^1.5.4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.2",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

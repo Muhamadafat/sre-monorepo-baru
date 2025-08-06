@@ -1,0 +1,296 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Article {
+  id          String                @id @default(uuid())
+  title       String
+  filePath    String
+  createdAt   DateTime              @default(now())
+  updateAt    DateTime              @updatedAt
+  userId      String?
+  sessionId   String?
+  abstract    String?
+  author      String?
+  doi         String?
+  keywords    String?
+  year        String?
+  annotations Annotation[]
+  session     BrainstormingSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user        User?                 @relation(fields: [userId], references: [id])
+  edges       Edge[]
+  nodes       Node[]
+}
+
+model Node {
+  id             String  @id @default(uuid())
+  label          String
+  title          String?
+  att_goal       String?
+  att_method     String?
+  att_background String?
+  att_future     String?
+  att_gaps       String?
+  att_url        String?
+  type           String
+  content        String
+  articleId      String
+  fromEdges      Edge[]  @relation("EdgeFrom")
+  toEdges        Edge[]  @relation("EdgeTo")
+  article        Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+}
+
+model Edge {
+  id        String  @id @default(uuid())
+  fromId    String
+  toId      String
+  relation  String?
+  label     String?
+  color     String?
+  articleId String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  from      Node    @relation("EdgeFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to        Node    @relation("EdgeTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId, relation])
+}
+
+model Analytics {
+  id        Int      @id @default(autoincrement())
+  action    String
+  document  String?
+  userId    String
+  metadata  Json?
+  timestamp DateTime @default(now())
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("analytics")
+}
+
+model User {
+  id                   String                 @id @default(uuid())
+  email                String                 @unique
+  name                 String?
+  password             String
+  role                 Role                   @default(USER)
+  createdAt            DateTime               @default(now())
+  updateAt             DateTime               @updatedAt
+  group                String?
+  nim                  String?
+  address              String?
+  avatar_url           String?
+  bio                  String?
+  birthDate            String?
+  faculty              String?
+  github               String?
+  isEmailVerified      Boolean?               @default(false)
+  isPhoneVerified      Boolean?               @default(false)
+  lastActive           DateTime?
+  linkedin             String?
+  major                String?
+  phone                String?
+  semester             Int?
+  settings             Json?
+  token_balance        Int?                   @default(0)
+  university           String?
+  website              String?
+  annotations          Annotation[]
+  articles             Article[]
+  createdAssignments   Assignment[]           @relation("AssignmentCreator")
+  submissions          AssignmentSubmission[]
+  brainstormingSession BrainstormingSession[]
+  drafts               Draft[]
+  tokenUsages          TokenUsage[]
+  writerSessions       WriterSession[]
+  xapiStatements       XapiStatement[]
+  analytics            Analytics[]
+}
+
+model Draft {
+  id            String         @id @default(uuid())
+  userId        String?
+  title         String
+  createdAt     DateTime       @default(now())
+  writerId      String?
+  user          User?          @relation(fields: [userId], references: [id])
+  writerSession WriterSession? @relation(fields: [writerId], references: [id], onDelete: Cascade)
+  sections      DraftSection[]
+}
+
+model DraftSection {
+  id          String       @id @default(uuid())
+  draftId     String
+  title       String
+  content     String
+  annotations Annotation[]
+  draft       Draft        @relation(fields: [draftId], references: [id], onDelete: Cascade)
+}
+
+model Annotation {
+  id              String        @id @default(uuid())
+  userId          String?
+  articleId       String?
+  page            Int
+  highlightedText String
+  comment         String
+  semanticTag     String?
+  draftSectionId  String?
+  createdAt       DateTime      @default(now())
+  article         Article?      @relation(fields: [articleId], references: [id])
+  draftSection    DraftSection? @relation(fields: [draftSectionId], references: [id])
+  user            User?         @relation(fields: [userId], references: [id])
+}
+
+model BrainstormingSession {
+  id                     String          @id @default(uuid())
+  title                  String
+  description            String?
+  userId                 String
+  selectedFilterArticles String[]        @default([])
+  lastSelectedNodeId     String?
+  lastSelectedEdgeId     String?
+  graphFilters           Json?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  lastActivity           DateTime        @default(now())
+  coverColor             String          @default("#4c6ef5")
+  articles               Article[]
+  user                   User            @relation(fields: [userId], references: [id])
+  chatMessages           ChatMessage[]
+  tokenUsages            TokenUsage[]
+  writerSessions         WriterSession[]
+}
+
+model ChatMessage {
+  id             String               @id @default(uuid())
+  sessionId      String
+  content        String
+  role           String
+  createdAt      DateTime             @default(now())
+  contextEdgeIds String[]             @default([])
+  contextNodeIds String[]             @default([])
+  references     Json?
+  session        BrainstormingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model WriterSession {
+  id                     String                @id @default(uuid())
+  title                  String
+  description            String?
+  userId                 String
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  lastActivity           DateTime              @default(now())
+  coverColor             String                @default("#4c6ef5")
+  brainstormingSessionId String?
+  drafts                 Draft[]
+  brainstormingSession   BrainstormingSession? @relation(fields: [brainstormingSessionId], references: [id])
+  user                   User                  @relation(fields: [userId], references: [id])
+}
+
+model Document {
+  id        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  content   String
+  metadata  Json                   @default("{}")
+  embedding Unsupported("vector")?
+  createdAt DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("documents")
+}
+
+model TokenUsage {
+  id           String                @id @default(uuid())
+  userId       String
+  sessionId    String?
+  tokensUsed   Int
+  inputTokens  Int                   @default(0)
+  outputTokens Int                   @default(0)
+  model        String
+  purpose      String
+  metadata     Json?
+  createdAt    DateTime              @default(now())
+  session      BrainstormingSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+}
+
+model Assignment {
+  id              String                 @id @default(uuid())
+  title           String
+  description     String
+  week_number     Int
+  assignment_code String
+  file_url        String?
+  file_name       String?
+  due_date        DateTime?
+  is_active       Boolean                @default(true)
+  created_by      String
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  target_classes  String?
+  creator         User                   @relation("AssignmentCreator", fields: [created_by], references: [id], onDelete: Cascade)
+  submissions     AssignmentSubmission[]
+
+  @@index([week_number])
+  @@index([is_active])
+}
+
+model AssignmentSubmission {
+  id                    String           @id @default(uuid())
+  assignment_id         String
+  student_id            String
+  assignment_code_input String
+  file_url              String?
+  file_name             String?
+  submission_text       String?
+  status                SubmissionStatus @default(pending)
+  grade                 Int?
+  feedback              String?
+  submitted_at          DateTime         @default(now())
+  graded_at             DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  assignment            Assignment       @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+  student               User             @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@index([assignment_id])
+  @@index([student_id])
+  @@index([status])
+}
+
+model XapiStatement {
+  id        String   @id @default(uuid())
+  actor     Json
+  verb      Json
+  object    Json
+  result    Json?
+  context   Json?
+  timestamp DateTime @default(now())
+  userId    String?
+  sequence  Int?
+  sessionId String?
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([timestamp])
+  @@index([sessionId])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SubmissionStatus {
+  pending
+  submitted
+  graded
+}
