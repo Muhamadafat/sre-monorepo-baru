@@ -1,4 +1,3 @@
-// src/app/layout.tsx
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import { MantineProvider, ColorSchemeScript } from '@mantine/core';
@@ -15,8 +14,11 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <ColorSchemeScript defaultColorScheme="auto" />
+      </head>
       <body>
-        <MantineProvider defaultColorScheme="light" forceColorScheme="light">
+        <MantineProvider defaultColorScheme="auto">
           <ModalsProvider>
             <Notifications />
             {children}

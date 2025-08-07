@@ -1710,7 +1710,7 @@ INSTRUKSI:
         },
         aliases: ["generate", "write", "tulis", "ai", "assistant", "ask", "help", "continue", "lanjut", "sentence", "struktur", "konten"],
         group: "AI Tools",
-        subtext: "Penyusunan Konten dengan prompt untuk struktur bab, isi konten, dan melanjutkan kalimat",
+        subtext: "Struktur & Konten Otomatis",
         icon: <IconPencilPlus size={18} />,
       },
       {
@@ -1727,7 +1727,7 @@ INSTRUKSI:
         },
         aliases: ["auto", "otomatis", "automatic", "smart", "cerdas", "instant", "langsung"],
         group: "AI Tools",
-        subtext: "Penyusunan otomatis struktur bab,isi konten, dan melanjutkan kalimat ",
+        subtext: "Tanya Jawab, Tulis, dan Ringkas Otomatis",
         icon: <IconSparkles size={18} />
       }
     ];
@@ -2015,7 +2015,7 @@ INSTRUKSI:
             <Text fw={700} size="xl">
               {aiMode === "continue" ? " AI Lanjutan Konten" : 
                aiMode === "auto" ? " AI Otomatis - Tanpa Prompt" :
-               "AI dengan Prompt (INPUT KONTEKS)"}
+               " Pembuatan Struktur & Konten Artikel Otomatis"}
             </Text>
           </Group>
         }
