@@ -14,9 +14,6 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <head>
-        <ColorSchemeScript defaultColorScheme="auto" />
-      </head>
       <body>
         <MantineProvider defaultColorScheme="auto">
           <ModalsProvider>

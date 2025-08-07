@@ -839,6 +839,56 @@ INSTRUKSI:
     }
   };
 
+  // FIXED: Insert AI content directly to current block for continuation
+  const insertAIContentDirectlyToBlock = async (text: string, currentBlock: Block) => {
+    try {
+      if (!text || !text.trim()) {
+        console.warn("No text to insert");
+        return;
+      }
+      
+      // Get current block text
+      const currentText = extractTextFromBlock(currentBlock);
+      
+      // Simply append the new text to the current block using insertInlineContent
+      if (currentBlock.type === "paragraph" || 
+          currentBlock.type === "bulletListItem" || 
+          currentBlock.type === "numberedListItem") {
+        
+        // Position cursor at the end of the block first
+        editor.setTextCursorPosition(currentBlock, "end");
+        
+        // Add a space if current text doesn't end with space or punctuation
+        const needsSpace = currentText && 
+          !currentText.endsWith(' ') && 
+          !currentText.endsWith('.') && 
+          !currentText.endsWith(',') && 
+          !currentText.endsWith('!') && 
+          !currentText.endsWith('?');
+        
+        const textToInsert = (needsSpace ? ' ' : '') + text.trim();
+        
+        // Insert the text directly into the current block
+        await editor.insertInlineContent([
+          {
+            type: "text",
+            text: textToInsert,
+            styles: {},
+          },
+        ]);
+        
+        console.log("Successfully inserted text directly to current block");
+        
+      } else {
+        // For other block types, create new blocks after
+        await insertAIContentAtCursor(text, currentBlock);
+      }
+    } catch (error) {
+      console.error("Error inserting AI content directly:", error);
+      throw error;
+    }
+  };
+
   // Insert AI content at cursor - FIXED
   const insertAIContentAtCursor = async (text: string, currentBlock: Block) => {
     try {
@@ -922,7 +972,7 @@ INSTRUKSI:
     }
   };
 
-  // Handle inline AI actions
+  // FIXED: Handle inline AI actions with proper continuation
   const handleInlineAIAction = async (action: string) => {
     const cursorPosition = editor.getTextCursorPosition();
     const currentBlock = cursorPosition?.block;
@@ -939,7 +989,7 @@ INSTRUKSI:
 
     try {
       let systemPrompt = "";
-      const maxTokens = 500;
+      const maxTokens = 200; // Reduced for continuation
 
       switch (action) {
         case "continue":
@@ -949,7 +999,7 @@ INSTRUKSI:
             systemPrompt = `Lanjutkan penulisan dengan konten yang natural dan relevan.
 
 INSTRUKSI:
-- Tulis 1-2 paragraf yang mengalir dengan baik
+- Tulis 1-2 kalimat yang mengalir dengan baik
 - Gunakan bahasa Indonesia yang natural
 - Berikan informasi yang valuable`;
             break;
@@ -988,54 +1038,38 @@ ${headingContent || "(Belum ada konten)"}
 KALIMAT SAAT INI: ${currentText}
 
 INSTRUKSI:
-- Lanjutkan dengan konten yang natural dan relevan dengan heading "${targetHeading.text}"
-- Jangan tulis ulang heading atau konten yang sudah ada
-- Tulis 1-2 paragraf tambahan yang melengkapi konten existing
+- Lanjutkan dari akhir kalimat saat ini dengan natural
+- JANGAN mengulang teks yang sudah ada
+- Tulis maksimal 2-3 kalimat tambahan yang melengkapi
 - Pertahankan konsistensi tone dan style
 - Fokus pada value yang belum dibahas terkait topik "${targetHeading.text}"
 
-TUGAS: Lanjutkan konten untuk "${targetHeading.text}"`;
+TUGAS: Lanjutkan kalimat untuk "${targetHeading.text}"`;
               }
               break;
               
             case 'paragraph':
-              systemPrompt = `Lanjutkan penulisan dari konteks paragraf berikut:
+            case 'list':
+              systemPrompt = `Lanjutkan kalimat dari konteks berikut:
 
 KONTEKS SEBELUMNYA:
 ${precedingContext}
 
 KALIMAT SAAT INI: ${currentText}
 
-INSTRUKSI:
-- Lanjutkan alur pemikiran dari kalimat yang sedang ditulis
+INSTRUKSI KHUSUS:
+- Lanjutkan langsung dari akhir kalimat saat ini
+- JANGAN mengulang atau menulis ulang teks yang sudah ada
+- Tulis maksimal 1-2 kalimat tambahan yang natural
 - Pertahankan kohesi dan koherensi dengan konteks sebelumnya
-- Tulis 1-2 paragraf yang mengalir natural
 - Jaga konsistensi tone dan style penulisan
-- Berikan informasi atau penjelasan yang melengkapi
+- Berikan kelanjutan yang logis dan bermakna
 
-TUGAS: Lanjutkan penulisan dengan mengikuti alur dan konteks yang sudah ada`;
-              break;
-              
-            case 'list':
-              systemPrompt = `Lanjutkan penulisan untuk item list berikut:
-
-KONTEKS SEBELUMNYA:
-${precedingContext}
-
-ITEM SAAT INI: ${currentText}
-
-INSTRUKSI:
-- Lanjutkan dengan item-item list yang relevan dan logis
-- Pertahankan format dan style yang konsisten
-- Tulis 2-3 item tambahan yang melengkapi
-- Pastikan ada progression yang masuk akal
-- ${targetHeading ? `Sesuaikan dengan topik "${targetHeading.text}"` : 'Ikuti alur yang sudah ada'}
-
-TUGAS: Lanjutkan dengan item list yang relevan`;
+TUGAS: Lanjutkan kalimat dengan natural mengikuti alur yang sudah ada`;
               break;
               
             default:
-              systemPrompt = `Lanjutkan penulisan dari konteks berikut:
+              systemPrompt = `Lanjutkan kalimat dari konteks berikut:
 
 KONTEKS SEBELUMNYA:
 ${precedingContext}
@@ -1043,12 +1077,11 @@ ${precedingContext}
 TEKS SAAT INI: ${currentText}
 
 INSTRUKSI:
-- Lanjutkan dengan natural dan relevan mengikuti alur yang ada
-- Tulis 1-2 paragraf yang melengkapi konteks
+- Lanjutkan langsung dari akhir kalimat saat ini
+- Tulis 1-2 kalimat tambahan yang natural
 - Jaga konsistensi tone dan alur penulisan
-- Berikan informasi yang valuable dan logis
 
-TUGAS: Lanjutkan penulisan mengikuti konteks dan alur yang sudah ada`;
+TUGAS: Lanjutkan kalimat mengikuti konteks dan alur yang sudah ada`;
           }
           break;
 
@@ -1100,7 +1133,18 @@ INSTRUKSI:
       });
 
       if (text && text.trim()) {
-        await insertAIContentAtCursor(text, currentBlock);
+        // Check if we should continue inline or create new blocks
+        if (action === "continue" && 
+            (currentBlock.type === "paragraph" || 
+             currentBlock.type === "bulletListItem" || 
+             currentBlock.type === "numberedListItem")) {
+          
+          // Use direct insertion for continuation
+          await insertAIContentDirectlyToBlock(text, currentBlock);
+        } else {
+          // Use regular block insertion for other cases
+          await insertAIContentAtCursor(text, currentBlock);
+        }
       } else {
         console.warn("No text generated from AI");
         alert("⚠️ AI tidak menghasilkan konten. Silakan coba lagi.");
@@ -1114,42 +1158,53 @@ INSTRUKSI:
     }
   };
 
-  // Handle selection change - FIXED to prevent infinite re-renders
+  // FIXED: Handle selection change with debouncing to prevent editor shrinking
   const handleSelectionChange = useCallback(() => {
     try {
-      const cursorPosition = editor.getTextCursorPosition();
-      if (!cursorPosition) {
-        setContinueState(prev => ({ ...prev, isVisible: false }));
-        setInlineAIState(prev => ({ ...prev, isVisible: false }));
-        return;
-      }
-
-      const currentBlock = cursorPosition.block;
-      
-      if (shouldShowContinueButton(currentBlock)) {
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-          const contextText = extractContextFromCursor();
-          
-          setContinueState({
-            isVisible: true,
-            position: { x: rect.right + 10, y: rect.bottom + 5 },
-            currentBlock,
-            contextText
-          });
-          
-          setInlineAIState(prev => ({ 
-            ...prev, 
-            currentBlock,
-            isVisible: false
-          }));
+      // Use setTimeout to debounce and prevent conflicts with other UI events
+      setTimeout(() => {
+        const cursorPosition = editor.getTextCursorPosition();
+        if (!cursorPosition) {
+          setContinueState(prev => ({ ...prev, isVisible: false }));
+          setInlineAIState(prev => ({ ...prev, isVisible: false }));
+          return;
         }
-      } else {
-        setContinueState(prev => ({ ...prev, isVisible: false }));
-        setInlineAIState(prev => ({ ...prev, isVisible: false }));
-      }
+
+        const currentBlock = cursorPosition.block;
+        
+        if (shouldShowContinueButton(currentBlock)) {
+          // Get cursor position more reliably
+          try {
+            const editorDom = document.querySelector('[data-node-type="blockContainer"]');
+            if (editorDom) {
+              const rect = editorDom.getBoundingClientRect();
+              const contextText = extractContextFromCursor();
+              
+              setContinueState({
+                isVisible: true,
+                position: { 
+                  x: rect.right - 60, // Position relative to editor container
+                  y: rect.top + 10 
+                },
+                currentBlock,
+                contextText
+              });
+              
+              setInlineAIState(prev => ({ 
+                ...prev, 
+                currentBlock,
+                isVisible: false
+              }));
+            }
+          } catch (positionError) {
+            console.warn("Could not get cursor position for continue button:", positionError);
+            setContinueState(prev => ({ ...prev, isVisible: false }));
+          }
+        } else {
+          setContinueState(prev => ({ ...prev, isVisible: false }));
+          setInlineAIState(prev => ({ ...prev, isVisible: false }));
+        }
+      }, 150); // Small delay to prevent conflicts
     } catch (error) {
       console.error("Error handling selection change:", error);
       setContinueState(prev => ({ ...prev, isVisible: false }));
@@ -1157,23 +1212,35 @@ INSTRUKSI:
     }
   }, [editor, shouldShowContinueButton, extractContextFromCursor]);
 
-  // Setup selection change listener
+  // Setup selection change listener with proper cleanup
   React.useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
     let unsubscribe: (() => void) | undefined;
     
+    const debouncedHandler = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleSelectionChange, 100);
+    };
+    
     try {
-      unsubscribe = editor.onChange?.(handleSelectionChange);
+      unsubscribe = editor.onChange?.(debouncedHandler);
     } catch (error) {
       console.error("Error setting up editor change listener:", error);
     }
     
-    document.addEventListener('selectionchange', handleSelectionChange);
+    const selectionHandler = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleSelectionChange, 100);
+    };
+    
+    document.addEventListener('selectionchange', selectionHandler);
     
     return () => {
+      clearTimeout(timeoutId);
       if (unsubscribe) {
         unsubscribe();
       }
-      document.removeEventListener('selectionchange', handleSelectionChange);
+      document.removeEventListener('selectionchange', selectionHandler);
     };
   }, [editor, handleSelectionChange]);
 
@@ -1457,7 +1524,7 @@ INSTRUKSI:
     }
   };
 
-  // Insert content to editor - Enhanced with content_cursor behavior and auto behavior
+  // FIXED: Insert content to editor with proper sentence continuation
   const insertContentToEditor = async (behavior: string = "rewrite") => {
     if (!generatedContent || !generatedContent.trim()) {
       console.warn("No generated content to insert");
@@ -1622,6 +1689,88 @@ INSTRUKSI:
             }
             break;
 
+          case "cursor":
+            // FIXED: For sentence continuation, insert directly to current block if appropriate
+            try {
+              let targetBlock = savedCursorPosition;
+              if (!targetBlock) {
+                const cursorPosition = editor.getTextCursorPosition();
+                targetBlock = cursorPosition?.block || null;
+              }
+              
+              if (targetBlock && 
+                  (targetBlock.type === "paragraph" || 
+                   targetBlock.type === "bulletListItem" || 
+                   targetBlock.type === "numberedListItem") &&
+                  blocksToInsert.length === 1 && 
+                  blocksToInsert[0].type === "paragraph") {
+                
+                // For single paragraph insertion to paragraph-like blocks, append directly
+                const textToAppend = blocksToInsert[0].content as string;
+                
+                // Position cursor at the end of the block first
+                editor.setTextCursorPosition(targetBlock, "end");
+                
+                // Get current block text
+                const currentText = extractTextFromBlock(targetBlock);
+                
+                // Add a space if current text doesn't end with space or punctuation
+                const needsSpace = currentText && 
+                  !currentText.endsWith(' ') && 
+                  !currentText.endsWith('.') && 
+                  !currentText.endsWith(',') && 
+                  !currentText.endsWith('!') && 
+                  !currentText.endsWith('?');
+                
+                const finalText = (needsSpace ? ' ' : '') + textToAppend;
+                
+                // Insert the text directly into the current block
+                await editor.insertInlineContent([
+                  {
+                    type: "text",
+                    text: finalText,
+                    styles: {},
+                  },
+                ]);
+                
+                console.log("Successfully appended text to current block for sentence continuation");
+                
+              } else {
+                // For other cases, insert as new blocks after current position
+                if (targetBlock) {
+                  await editor.insertBlocks(blocksToInsert, targetBlock, "after");
+                  
+                  // Set cursor ke block pertama yang baru di-insert
+                  setTimeout(() => {
+                    try {
+                      const newAllBlocks = editor.document;
+                      const targetIndex = newAllBlocks.findIndex(block => block.id === targetBlock!.id);
+                      const firstInsertedIndex = targetIndex + 1;
+                      
+                      if (firstInsertedIndex < newAllBlocks.length) {
+                        const firstInsertedBlock = newAllBlocks[firstInsertedIndex];
+                        if (firstInsertedBlock) {
+                          editor.setTextCursorPosition(firstInsertedBlock, "start");
+                        }
+                      }
+                    } catch (e) {
+                      console.log("Cursor positioning adjustment:", e);
+                    }
+                  }, 150);
+                } else {
+                  // Fallback: insert di akhir jika tidak ada cursor position
+                  const lastBlock = editor.document[editor.document.length - 1];
+                  await editor.insertBlocks(blocksToInsert, lastBlock, "after");
+                }
+              }
+            } catch (error) {
+              console.error("Error inserting at cursor position:", error);
+              // Fallback: insert di akhir
+              const lastBlock = editor.document[editor.document.length - 1];
+              await editor.insertBlocks(blocksToInsert, lastBlock, "after");
+            }
+            break;
+
           case "add":
             // NEW: Add behavior untuk AI Auto mode
             try {
@@ -1710,7 +1859,7 @@ INSTRUKSI:
         },
         aliases: ["generate", "write", "tulis", "ai", "assistant", "ask", "help", "continue", "lanjut", "sentence", "struktur", "konten"],
         group: "AI Tools",
-        subtext: "Struktur & Konten Otomatis",
+        subtext: "Penyusunan Konten dengan prompt untuk struktur bab, isi konten, dan melanjutkan kalimat",
         icon: <IconPencilPlus size={18} />,
       },
       {
@@ -1727,7 +1876,7 @@ INSTRUKSI:
         },
         aliases: ["auto", "otomatis", "automatic", "smart", "cerdas", "instant", "langsung"],
         group: "AI Tools",
-        subtext: "Tanya Jawab, Tulis, dan Ringkas Otomatis",
+        subtext: "Penyusunan otomatis struktur bab,isi konten, dan melanjutkan kalimat ",
         icon: <IconSparkles size={18} />
       }
     ];
@@ -1947,12 +2096,12 @@ INSTRUKSI:
           </div>
         )}
 
-        {/* Auto Continue Writing Button */}
+        {/* FIXED: Auto Continue Writing Button with better positioning */}
         {continueState.isVisible && !isAutoContinuing && (
           <div
             ref={continueRef}
             style={{
-              position: 'absolute',
+              position: 'fixed', // Changed from absolute to fixed for better stability
               left: continueState.position.x,
               top: continueState.position.y,
               zIndex: 999,
@@ -2015,7 +2164,7 @@ INSTRUKSI:
             <Text fw={700} size="xl">
               {aiMode === "continue" ? " AI Lanjutan Konten" : 
                aiMode === "auto" ? " AI Otomatis - Tanpa Prompt" :
-               " Pembuatan Struktur & Konten Artikel Otomatis"}
+               "AI dengan Prompt (INPUT KONTEKS)"}
             </Text>
           </Group>
         }
@@ -2134,15 +2283,6 @@ INSTRUKSI:
                         <Text size="xs" c="dimmed" ta="center" px="lg">
                           {template.description}
                         </Text>
-                        {/* Mode indicator for auto */}
-                        {aiMode === "auto" && (
-                          <Badge 
-                            size="xs" 
-                            variant="light" 
-                            color="blue"
-                          >
-                          </Badge>
-                        )}
                       </Stack>
                     </Card>
                   ))}
@@ -2254,7 +2394,7 @@ INSTRUKSI:
                    (currentAIType === "content" && aiMode === "auto") ? "Tambah Konten" :
                    currentAIType === "content" ? "Tambah di Heading" :
                    (currentAIType === "sentence" && aiMode === "auto") ? "Tambah Kalimat" :
-                   currentAIType === "sentence" ? "Tambah di Cursor" :
+                   currentAIType === "sentence" ? "Lanjutkan di Cursor" :
                    aiMode === "continue" ? "Tambahkan ke Editor" : "Masukkan ke Editor"}
                 </Button>
 
@@ -2278,14 +2418,14 @@ INSTRUKSI:
                 </Button>
               </Group>
 
-              {/* Behavior Info */}
+              {/* Behavior Info - FIXED text for sentence continuation */}
               <Paper p="md" radius="md" bg={computedColorScheme === "dark" ? "dark.7" : "gray.0"}>
                 <Text size="sm" c="dimmed" ta="center">
                   {currentAIType === "structure" && "⚠️ Mode Struktur akan mengganti semua konten yang ada dengan struktur baru"}
                   {(currentAIType === "content" && aiMode === "auto") && "📍 Mode Konten Otomatis akan menambahkan konten di posisi cursor aktif"}
                   {(currentAIType === "content" && aiMode !== "auto") && "📍 Mode Konten akan menambahkan konten di bawah heading/sub-heading saat ini"}
-                  {(currentAIType === "sentence" && aiMode === "auto") && "📍 Mode Kalimat Otomatis akan menambahkan konten di posisi cursor aktif"}
-                  {(currentAIType === "sentence" && aiMode !== "auto") && "📍 Mode Kalimat akan menambahkan konten di posisi cursor aktif"}
+                  {(currentAIType === "sentence" && aiMode === "auto") && "📍 Mode Kalimat Otomatis akan melanjutkan kalimat di posisi cursor yang sama"}
+                  {(currentAIType === "sentence" && aiMode !== "auto") && "📍 Mode Kalimat akan melanjutkan kalimat di posisi cursor yang sama"}
                 </Text>
               </Paper>
             </Stack>
