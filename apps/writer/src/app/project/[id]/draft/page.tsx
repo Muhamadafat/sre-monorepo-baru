@@ -1,3 +1,5 @@
+// Page.tsx
+
 'use client'
 
 import dynamic from 'next/dynamic';
@@ -265,6 +267,24 @@ export default function Home() {
 
   const [opened, setOpened] = useState(false);
   const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
+
+  const [mcpContext, setMcpContext] = useState<{
+    sessionId: string;
+    contextNodeIds: string[];
+    contextEdgeIds: string[];
+    nodeId: string | null;
+    nodeIds: string[];
+    mode: "general" | "single node" | "multiple node";
+  } | null>(null);
+
+  type McpContextType = {
+    sessionId: string;
+    contextNodeIds: string[];
+    contextEdgeIds: string[];
+    nodeId: string | null;
+    nodeIds: string[];
+    mode: "general" | "single node" | "multiple node";
+  };
 
   // 2. Handler untuk membuka modal PDF
   const handlePdfOpen = (pdfUrl: string) => {
@@ -1345,6 +1365,65 @@ const handleSubmitToTeacher = async () => {
       setLoading(false);
     }
   };
+
+  const prepareMcpContext = useCallback(() => {
+    if (!writerSession || !dropdownUser) {
+      console.log('⏳ Waiting for writerSession and dropdownUser...');
+      return;
+    }
+
+    console.log('🎯 Preparing MCP context...');
+    console.log('- Writer Session:', writerSession.id);
+    console.log('- User:', dropdownUser.id);
+    console.log('- Available nodes:', article.length);
+
+    const contextData: McpContextType = {
+      sessionId: `writer-${writerSession.id}-${dropdownUser.id}`,
+      contextNodeIds: [],
+      contextEdgeIds: [],
+      nodeId: null,
+      nodeIds: [],
+      mode: "general" as const // Use const assertion for literal type
+    };
+
+    // Determine context based on available nodes
+    if (article.length === 0) {
+      // No nodes available - general mode
+      console.log('📝 Mode: GENERAL (no nodes available)');
+      contextData.mode = "general" as const;
+    } else if (article.length === 1) {
+      // Single node mode
+      console.log('🎯 Mode: SINGLE NODE');
+      const singleNode = article[0];
+      contextData.contextNodeIds = [singleNode.id];
+      contextData.nodeId = singleNode.id;
+      contextData.mode = "single node" as const;
+      
+      console.log('- Node ID:', singleNode.id);
+      // console.log('- Node Label:', singleNode.label);
+    } else {
+      // Multiple nodes mode
+      console.log('🎯 Mode: MULTIPLE NODES');
+      const nodeIds = article.map(node => node.id);
+      contextData.contextNodeIds = nodeIds;
+      contextData.nodeIds = nodeIds;
+      contextData.mode = "multiple node" as const;
+      
+      console.log('- Node IDs:', nodeIds);
+      console.log('- Node Count:', nodeIds.length);
+    }
+
+    console.log('✅ Final MCP context:', contextData);
+    setMcpContext(contextData);
+  }, [writerSession, dropdownUser, article]);
+
+  useEffect(() => {
+    if (writerSession && dropdownUser) {
+      console.log('🔄 Updating MCP context based on nodes...');
+      prepareMcpContext();
+    }
+  }, [writerSession, dropdownUser, article, prepareMcpContext]);
+
 
   useEffect(() => {
       getArticle();
@@ -2541,6 +2620,11 @@ const handleSubmitToTeacher = async () => {
                               display: 'flex',
                               flexDirection: 'column',
                             }}
+                            mcpContext={mcpContext}
+                            writerSession={writerSession}
+                            projectId={projectId}
+                            isFromBrainstorming={isFromBrainstorming}
+                            nodesData={article} 
                           />
                           {isScanning && (
                             /* Scanning Overlay */
@@ -3451,6 +3535,11 @@ const handleSubmitToTeacher = async () => {
                           display: 'flex',
                           flexDirection: 'column',
                         }}
+                        mcpContext={mcpContext}
+                        writerSession={writerSession}
+                        projectId={projectId}
+                        isFromBrainstorming={isFromBrainstorming}
+                        nodesData={article}
                       />
                       {isScanning && (
                         /* Scanning Overlay */

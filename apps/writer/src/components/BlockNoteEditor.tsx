@@ -74,11 +74,29 @@ interface BlockNoteEditorRef {
   // tambahkan method lain yang diperlukan
 }
 
+//article interface
+interface Article {
+  id: string;
+  title: string;
+  att_background: string;
+  att_url: string;
+}
 interface BlockNoteEditorProps {
   onContentChange?: (content: Block[]) => void;
   style?: React.CSSProperties;
+  mcpContext?: {
+    sessionId: string;
+    contextNodeIds: string[];
+    contextEdgeIds: string[];
+    nodeId: string | null;
+    nodeIds: string[];
+    mode: "general" | "single node" | "multiple node";
+  } | null;
+  writerSession?: any;
+  projectId?: string;
+  isFromBrainstorming?: boolean;
+  nodesData?: Article[];
 }
-
 interface ContinueWritingState {
   isVisible: boolean;
   position: { x: number; y: number };
@@ -228,7 +246,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     },
     {
       title: "Isi Konten ",
-      description: " Konten detail dan mendalam untuk topik",
+      description: " Konten detail dan mendalam untuk topik ",
       type: "content",
       color: "green",
       icon: IconEdit,
@@ -258,7 +276,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     },
     {
       title: "Buat Isi Konten",
-      description: "(otomatis tanpa prompt - mengisi konten di heading aktif)",
+      description: " Konten detail dan mendalam untuk topik secara otomatis ",
       type: "content", 
       color: "green",
       icon: IconEdit,
