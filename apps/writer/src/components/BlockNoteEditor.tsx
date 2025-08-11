@@ -131,6 +131,91 @@ interface AIAutoTemplate {
   behavior: string;
 }
 
+// CSS Animations - Added for BlockNote-style animations
+const animationStyles = `
+  @keyframes sparkle-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.05);
+    }
+  }
+
+  @keyframes sparkle-rotate {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes sparkle-glow {
+    0%, 100% {
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.3), 0 0 16px rgba(59, 130, 246, 0.2);
+    }
+    50% {
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.5), 0 0 24px rgba(59, 130, 246, 0.3);
+    }
+  }
+
+  @keyframes sparkle-float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-2px);
+    }
+  }
+
+  .continue-button {
+    animation: sparkle-pulse 2s ease-in-out infinite, 
+               sparkle-glow 2s ease-in-out infinite,
+               sparkle-float 3s ease-in-out infinite;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .continue-button:hover {
+    animation: sparkle-pulse 1s ease-in-out infinite, 
+               sparkle-glow 1s ease-in-out infinite,
+               sparkle-float 1.5s ease-in-out infinite;
+    transform: scale(1.1) !important;
+  }
+
+  .continue-button .icon-sparkle {
+    animation: sparkle-rotate 4s linear infinite;
+  }
+
+  .continue-button:hover .icon-sparkle {
+    animation: sparkle-rotate 2s linear infinite;
+  }
+
+  .continue-button-wrapper {
+    position: relative;
+  }
+
+  .continue-button-wrapper::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    background: linear-gradient(45deg, rgba(59, 130, 246, 0.2), rgba(147, 197, 253, 0.2));
+    border-radius: 50%;
+    opacity: 0;
+    animation: sparkle-pulse 2s ease-in-out infinite;
+    z-index: -1;
+  }
+
+  .continue-button:hover::before {
+    opacity: 1;
+  }
+`;
+
 // Main component
 const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorProps>(
   function BlockNoteEditorComponent(
@@ -138,6 +223,25 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     ref 
   ) {
   const computedColorScheme = useComputedColorScheme("light");
+  
+  // Add CSS animations to head
+  React.useEffect(() => {
+    const existingStyle = document.getElementById('blocknote-animations');
+    if (!existingStyle) {
+      const styleElement = document.createElement('style');
+      styleElement.id = 'blocknote-animations';
+      styleElement.textContent = animationStyles;
+      document.head.appendChild(styleElement);
+    }
+    
+    return () => {
+      // Cleanup on unmount
+      const styleElement = document.getElementById('blocknote-animations');
+      if (styleElement) {
+        styleElement.remove();
+      }
+    };
+  }, []);
   
   // Core states
   const [isAILoading, setIsAILoading] = React.useState(false);
@@ -2114,31 +2218,42 @@ INSTRUKSI:
           </div>
         )}
 
-        {/* FIXED: Auto Continue Writing Button with better positioning */}
+        {/* Enhanced Continue Writing Button with BlockNote-style animations */}
         {continueState.isVisible && !isAutoContinuing && (
           <div
             ref={continueRef}
+            className="continue-button-wrapper"
             style={{
-              position: 'fixed', // Changed from absolute to fixed for better stability
+              position: 'fixed',
               left: continueState.position.x,
               top: continueState.position.y,
               zIndex: 999,
               pointerEvents: 'auto'
             }}
           >
-            <Tooltip label="Continue writing with AI" position="top">
+            <Tooltip label="Continue writing with AI" position="top" withArrow>
               <ActionIcon
+                className="continue-button"
                 size="lg"
                 radius="xl"
                 variant="gradient"
                 gradient={{ from: 'blue', to: 'cyan' }}
                 onClick={() => handleInlineAIAction('continue')}
                 style={{
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                  animation: 'pulse 2s infinite'
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3), 0 0 20px rgba(59, 130, 246, 0.2)',
+                  border: '2px solid rgba(255, 255, 255, 0.3)',
+                  backdropFilter: 'blur(10px)',
+                  position: 'relative',
+                  overflow: 'visible'
                 }}
               >
-                <IconWand size={18} />
+                <IconSparkles 
+                  className="icon-sparkle" 
+                  size={18} 
+                  style={{
+                    filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.8))'
+                  }}
+                />
               </ActionIcon>
             </Tooltip>
           </div>
