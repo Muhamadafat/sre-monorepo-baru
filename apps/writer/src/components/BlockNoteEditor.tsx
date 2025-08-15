@@ -44,6 +44,8 @@ import {
   IconPencilPlus,
   IconRobot,
   IconAutomation,
+  IconX,
+  IconRefresh,
 } from "@tabler/icons-react";
 import { generateText } from "ai";
 import React, { forwardRef, useCallback, useImperativeHandle } from "react";
@@ -111,6 +113,16 @@ interface InlineAIState {
   query: string;
 }
 
+// NEW: Interface untuk AI Streaming State
+interface AIStreamingState {
+  isStreaming: boolean;
+  streamedText: string;
+  currentBlock: Block | null;
+  originalText: string;
+  showControls: boolean;
+  position: { x: number; y: number };
+}
+
 // Template interfaces - Fixed to include all required properties
 interface AITemplate {
   title: string;
@@ -131,7 +143,7 @@ interface AIAutoTemplate {
   behavior: string;
 }
 
-// CSS Animations - Added for BlockNote-style animations
+// CSS Animations - Added for BlockNote-style animations + Streaming animations
 const animationStyles = `
   @keyframes sparkle-pulse {
     0%, 100% {
@@ -168,6 +180,37 @@ const animationStyles = `
     }
     50% {
       transform: translateY(-2px);
+    }
+  }
+
+  @keyframes typing-cursor {
+    0%, 50% {
+      opacity: 1;
+    }
+    51%, 100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-in {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slide-up {
+    0% {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 
@@ -213,6 +256,33 @@ const animationStyles = `
 
   .continue-button:hover::before {
     opacity: 1;
+  }
+
+  .ai-streaming-text {
+    position: relative;
+  }
+
+  .ai-streaming-text::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1.2em;
+    background-color: #3b82f6;
+    margin-left: 2px;
+    animation: typing-cursor 1s infinite;
+    vertical-align: text-bottom;
+  }
+
+  .ai-streaming-controls {
+    animation: slide-up 0.3s ease-out;
+  }
+
+  .ai-streaming-overlay {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 197, 253, 0.1));
+    border: 2px solid rgba(59, 130, 246, 0.3);
+    border-radius: 8px;
+    padding: 4px;
+    animation: fade-in 0.3s ease-out;
   }
 `;
 
@@ -270,6 +340,21 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     query: "",
   });
   const inlineAIRef = useClickOutside(() => setInlineAIState(prev => ({ ...prev, isVisible: false })));
+
+  // NEW: AI Streaming state
+  const [aiStreamingState, setAIStreamingState] = React.useState<AIStreamingState>({
+    isStreaming: false,
+    streamedText: "",
+    currentBlock: null,
+    originalText: "",
+    showControls: false,
+    position: { x: 0, y: 0 }
+  });
+  const streamingControlsRef = useClickOutside(() => {
+    if (aiStreamingState.showControls && !aiStreamingState.isStreaming) {
+      setAIStreamingState(prev => ({ ...prev, showControls: false }));
+    }
+  });
 
   // AI Model setup
   const aiModel = React.useMemo(() => {
@@ -418,6 +503,180 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     }
   ];
 
+  // NEW: Utility function untuk typing animation
+  const typeText = async (text: string, targetBlock: Block, delay: number = 30): Promise<void> => {
+    return new Promise(async (resolve) => {
+      let currentIndex = 0;
+      const words = text.split(' ');
+      let insertedBlock: Block | null = null;
+      
+      // Check if target block is a heading - if so, create new paragraph below it
+      if (targetBlock.type === "heading") {
+        try {
+          // Create new paragraph block for the AI content
+          const newParagraphBlocks: PartialBlock[] = [{
+            type: "paragraph",
+            content: "",
+          }];
+          
+          await editor.insertBlocks(newParagraphBlocks, targetBlock, "after");
+          
+          // Get the newly inserted block
+          const allBlocks = editor.document;
+          const targetIndex = allBlocks.findIndex(block => block.id === targetBlock.id);
+          insertedBlock = allBlocks[targetIndex + 1];
+          
+          // Update streaming state with the new block
+          setAIStreamingState(prev => ({
+            ...prev,
+            currentBlock: insertedBlock,
+            originalText: ""
+          }));
+          
+        } catch (error) {
+          console.error("Error creating paragraph block below heading:", error);
+          resolve();
+          return;
+        }
+      } else {
+        // For non-heading blocks (paragraph, list items, etc.), continue in the same block
+        insertedBlock = targetBlock;
+      }
+      
+      if (!insertedBlock) {
+        resolve();
+        return;
+      }
+      
+      const typeNextWord = () => {
+        if (currentIndex < words.length) {
+          const wordsToShow = words.slice(0, currentIndex + 1).join(' ');
+          
+          // Update the block content with typed text
+          try {
+            // For heading case, we're typing in the new paragraph
+            if (targetBlock.type === "heading") {
+              // Simply update the paragraph block content
+              editor.updateBlock(insertedBlock!, {
+                type: "paragraph",
+                content: wordsToShow,
+              });
+            } else {
+              // FIXED: For regular blocks, ALWAYS preserve original text and append AI text
+              let newContent = "";
+              
+              // Always start with original text (preserve existing content)
+              if (aiStreamingState.originalText && aiStreamingState.originalText.trim()) {
+                // Check if we need to add space before new content
+                const needsSpace = !aiStreamingState.originalText.endsWith(' ') && 
+                  !aiStreamingState.originalText.endsWith('.') && 
+                  !aiStreamingState.originalText.endsWith(',') && 
+                  !aiStreamingState.originalText.endsWith('!') && 
+                  !aiStreamingState.originalText.endsWith('?') &&
+                  !aiStreamingState.originalText.endsWith(':') &&
+                  !aiStreamingState.originalText.endsWith(';') &&
+                  !aiStreamingState.originalText.endsWith('-') &&
+                  !aiStreamingState.originalText.endsWith('—');
+                
+                // Combine original text + space (if needed) + AI text
+                newContent = aiStreamingState.originalText + (needsSpace ? ' ' : '') + wordsToShow;
+              } else {
+                // If no original text, just use AI text
+                newContent = wordsToShow;
+              }
+              
+              // Update block with COMBINED content (original + AI)
+              editor.updateBlock(insertedBlock!, {
+              type: insertedBlock!.type as "paragraph" | "heading" | "bulletListItem" | "numberedListItem",
+              content: newContent,
+            });
+            }
+            
+            // Update streaming state
+            setAIStreamingState(prev => ({
+              ...prev,
+              streamedText: wordsToShow,
+              currentBlock: insertedBlock
+            }));
+            
+          } catch (error) {
+            console.error("Error during typing animation:", error);
+          }
+          
+          currentIndex++;
+          setTimeout(typeNextWord, delay);
+        } else {
+          // Typing completed
+          setAIStreamingState(prev => ({
+            ...prev,
+            isStreaming: false,
+            showControls: true
+          }));
+          resolve();
+        }
+      };
+      
+      typeNextWord();
+    });
+  };
+
+  // NEW: Accept AI content
+  const acceptAIContent = () => {
+    setAIStreamingState({
+      isStreaming: false,
+      streamedText: "",
+      currentBlock: null,
+      originalText: "",
+      showControls: false,
+      position: { x: 0, y: 0 }
+    });
+    setContinueState(prev => ({ ...prev, isVisible: false }));
+  };
+
+  // NEW: Revert AI content
+  const revertAIContent = () => {
+    if (aiStreamingState.currentBlock) {
+      try {
+        // Check if the current block was originally a heading
+        const allBlocks = editor.document;
+        const currentIndex = allBlocks.findIndex(block => block.id === aiStreamingState.currentBlock!.id);
+        
+        // If this was a paragraph created below a heading, remove it
+        if (currentIndex > 0 && allBlocks[currentIndex - 1].type === "heading" && 
+            aiStreamingState.originalText === "") {
+          // Remove the paragraph block that was created for AI content
+          editor.removeBlocks([aiStreamingState.currentBlock]);
+          
+          // Set cursor back to the heading
+          const headingBlock = allBlocks[currentIndex - 1];
+          editor.setTextCursorPosition(headingBlock, "end");
+        } else {
+          // FIXED: Restore ONLY original text (remove AI addition)
+          editor.updateBlock(aiStreamingState.currentBlock, {
+          type: aiStreamingState.currentBlock.type as "paragraph" | "heading" | "bulletListItem" | "numberedListItem",
+          content: aiStreamingState.originalText,
+        });
+
+          // Position cursor at end of original content
+          editor.setTextCursorPosition(aiStreamingState.currentBlock, "end");
+        }
+        
+      } catch (error) {
+        console.error("Error reverting AI content:", error);
+      }
+    }
+    
+    setAIStreamingState({
+      isStreaming: false,
+      streamedText: "",
+      currentBlock: null,
+      originalText: "",
+      showControls: false,
+      position: { x: 0, y: 0 }
+    });
+    setContinueState(prev => ({ ...prev, isVisible: false }));
+  };
+
   // Utility function to extract text from any block - FIXED
   const extractTextFromBlock = useCallback((block: Block): string => {
     try {
@@ -505,6 +764,9 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     try {
       if (!block) return false;
       
+      // Don't show if AI is streaming
+      if (aiStreamingState.isStreaming || aiStreamingState.showControls) return false;
+      
       // Allow continue button for headings (untuk generate content)
       if (block.type === "heading") {
         return true;
@@ -515,7 +777,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
         const text = extractTextFromBlock(block);
         
         // Show continue button for any paragraph with content (even short ones)
-        if (text.length >= 5) {
+        if (text.length >= 3) { // Reduced from 5 to 3 for better UX
           return true;
         }
       }
@@ -523,7 +785,15 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       // Also allow for list items
       if (block.type === "bulletListItem" || block.type === "numberedListItem") {
         const text = extractTextFromBlock(block);
-        if (text.length >= 3) {
+        if (text.length >= 2) { // Reduced from 3 to 2 for better UX
+          return true;
+        }
+      }
+      
+      // NEW: Allow for other block types that can contain text
+      if (block.type === "checkListItem") {
+        const text = extractTextFromBlock(block);
+        if (text.length >= 2) {
           return true;
         }
       }
@@ -532,7 +802,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     } catch {
       return false;
     }
-  }, [extractTextFromBlock]);
+  }, [extractTextFromBlock, aiStreamingState.isStreaming, aiStreamingState.showControls]);
 
   // Find matching heading
   const findMatchingHeading = (blocks: Block[], headingText: string, level: number, startIndex: number): number => {
@@ -902,11 +1172,17 @@ INSTRUKSI:
         };
       }
       
-      // Check if cursor is in a regular paragraph
+      // ENHANCED: Check if cursor is in a regular paragraph
       if (currentBlock.type === "paragraph") {
         // Find governing heading
         let governingHeading: HeadingInfo | null = null;
         let headingContent = "";
+        let isDirectlyUnderHeading = false;
+        
+        // Check if this paragraph is DIRECTLY under a heading (no other paragraphs in between)
+        if (currentIndex > 0 && allBlocks[currentIndex - 1].type === "heading") {
+          isDirectlyUnderHeading = true;
+        }
         
         for (let i = currentIndex - 1; i >= 0; i--) {
           const block = allBlocks[i];
@@ -921,7 +1197,7 @@ INSTRUKSI:
                 block: block
               };
               
-              // Collect content under this heading
+              // Collect content under this heading (but skip current block to avoid duplication)
               for (let j = i + 1; j < currentIndex; j++) {
                 const contentBlock = allBlocks[j];
                 const contentText = extractTextFromBlock(contentBlock);
@@ -934,15 +1210,30 @@ INSTRUKSI:
           }
         }
         
-        return {
-          targetHeading: governingHeading,
-          headingContent: headingContent.trim(),
-          insertPosition: currentIndex,
-          isAtHeading: false,
-          contextType: governingHeading ? 'under_heading' : 'paragraph',
-          currentText,
-          precedingContext: precedingContext.trim()
-        };
+        // FIXED: If paragraph has content and is not empty, treat as regular paragraph continuation
+        // regardless of whether it's under a heading or not
+        if (currentText && currentText.trim().length > 0) {
+          return {
+            targetHeading: governingHeading,
+            headingContent: headingContent.trim(),
+            insertPosition: currentIndex,
+            isAtHeading: false,
+            contextType: 'paragraph', // Always treat as paragraph if it has content
+            currentText,
+            precedingContext: precedingContext.trim()
+          };
+        } else {
+          // Only treat as 'under_heading' if paragraph is empty and directly under heading
+          return {
+            targetHeading: governingHeading,
+            headingContent: headingContent.trim(),
+            insertPosition: currentIndex,
+            isAtHeading: false,
+            contextType: isDirectlyUnderHeading ? 'under_heading' : 'paragraph',
+            currentText,
+            precedingContext: precedingContext.trim()
+          };
+        }
       }
       
       // General case
@@ -961,140 +1252,7 @@ INSTRUKSI:
     }
   };
 
-  // FIXED: Insert AI content directly to current block for continuation
-  const insertAIContentDirectlyToBlock = async (text: string, currentBlock: Block) => {
-    try {
-      if (!text || !text.trim()) {
-        console.warn("No text to insert");
-        return;
-      }
-      
-      // Get current block text
-      const currentText = extractTextFromBlock(currentBlock);
-      
-      // Simply append the new text to the current block using insertInlineContent
-      if (currentBlock.type === "paragraph" || 
-          currentBlock.type === "bulletListItem" || 
-          currentBlock.type === "numberedListItem") {
-        
-        // Position cursor at the end of the block first
-        editor.setTextCursorPosition(currentBlock, "end");
-        
-        // Add a space if current text doesn't end with space or punctuation
-        const needsSpace = currentText && 
-          !currentText.endsWith(' ') && 
-          !currentText.endsWith('.') && 
-          !currentText.endsWith(',') && 
-          !currentText.endsWith('!') && 
-          !currentText.endsWith('?');
-        
-        const textToInsert = (needsSpace ? ' ' : '') + text.trim();
-        
-        // Insert the text directly into the current block
-        await editor.insertInlineContent([
-          {
-            type: "text",
-            text: textToInsert,
-            styles: {},
-          },
-        ]);
-        
-        console.log("Successfully inserted text directly to current block");
-        
-      } else {
-        // For other block types, create new blocks after
-        await insertAIContentAtCursor(text, currentBlock);
-      }
-    } catch (error) {
-      console.error("Error inserting AI content directly:", error);
-      throw error;
-    }
-  };
-
-  // Insert AI content at cursor - FIXED
-  const insertAIContentAtCursor = async (text: string, currentBlock: Block) => {
-    try {
-      if (!text || !text.trim()) {
-        console.warn("No text to insert");
-        return;
-      }
-      
-      const lines = text.split('\n').filter((line: string) => line.trim());
-      
-      if (lines.length === 0) {
-        console.warn("No valid lines to insert");
-        return;
-      }
-      
-      const blocksToInsert: PartialBlock[] = lines.map((line: string) => {
-        const trimmedLine = line.trim();
-        
-        // Parse markdown-style headings
-        const headingMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
-        if (headingMatch) {
-          const level = Math.min(headingMatch[1].length, 3) as 1 | 2 | 3;
-          const headingText = headingMatch[2];
-          return {
-            type: "heading" as const,
-            content: headingText,
-            props: { level },
-          };
-        }
-        
-        // Parse bullet list items
-        if (trimmedLine.match(/^[\*\-]\s+/)) {
-          const listText = trimmedLine.replace(/^[\*\-]\s+/, '');
-          return {
-            type: "bulletListItem" as const,
-            content: listText,
-          };
-        }
-        
-        // Parse numbered list items
-        if (trimmedLine.match(/^\d+\.\s+/)) {
-          const listText = trimmedLine.replace(/^\d+\.\s+/, '');
-          return {
-            type: "numberedListItem" as const,
-            content: listText,
-          };
-        }
-        
-        // Default to paragraph
-        return {
-          type: "paragraph" as const,
-          content: trimmedLine,
-        };
-      });
-
-      if (blocksToInsert.length > 0) {
-        // Use insertBlocks method properly
-        await editor.insertBlocks(blocksToInsert, currentBlock, "after");
-        
-        // Set cursor position to the last inserted block
-        setTimeout(() => {
-          try {
-            const allBlocks = editor.document;
-            const currentIndex = allBlocks.findIndex(block => block.id === currentBlock.id);
-            const lastInsertedIndex = currentIndex + blocksToInsert.length;
-            
-            if (lastInsertedIndex < allBlocks.length) {
-              const lastInsertedBlock = allBlocks[lastInsertedIndex];
-              if (lastInsertedBlock) {
-                editor.setTextCursorPosition(lastInsertedBlock, "end");
-              }
-            }
-          } catch (e) {
-            console.log("Cursor positioning adjustment:", e);
-          }
-        }, 100);
-      }
-    } catch (error) {
-      console.error("Error inserting AI content:", error);
-      throw error;
-    }
-  };
-
-  // FIXED: Handle inline AI actions with proper continuation
+  // NEW: Handle inline AI actions with streaming animation
   const handleInlineAIAction = async (action: string) => {
     const cursorPosition = editor.getTextCursorPosition();
     const currentBlock = cursorPosition?.block;
@@ -1105,13 +1263,41 @@ INSTRUKSI:
       return;
     }
 
+    // Hide popup and start streaming
     setInlineAIState(prev => ({ ...prev, isVisible: false }));
     setContinueState(prev => ({ ...prev, isVisible: false }));
-    setIsAutoContinuing(true);
+    
+    // Setup streaming state - ENHANCED for all block types
+    let targetBlock = currentBlock;
+    let originalText = "";
+    
+    // Different handling based on block type
+    if (currentBlock.type === "heading") {
+      // For headings, original text is empty since we'll create new content below
+      originalText = "";
+    } else if (currentBlock.type === "paragraph" || 
+               currentBlock.type === "bulletListItem" || 
+               currentBlock.type === "numberedListItem" ||
+               currentBlock.type === "checkListItem") {
+      // For text-based blocks, get the current text to continue from
+      originalText = extractTextFromBlock(currentBlock);
+    } else {
+      // For other block types, treat as empty and create new content
+      originalText = "";
+    }
+    
+    setAIStreamingState({
+      isStreaming: true,
+      streamedText: "",
+      currentBlock: targetBlock, // This will be updated in typeText if it's a heading
+      originalText: originalText,
+      showControls: false,
+      position: { x: 0, y: 0 }
+    });
 
     try {
       let systemPrompt = "";
-      const maxTokens = 200; // Reduced for continuation
+      const maxTokens = 150; // Reduced for continuation
 
       switch (action) {
         case "continue":
@@ -1138,7 +1324,7 @@ INSTRUKSI:
 HEADING TARGET: ${targetHeading.text} (Level ${targetHeading.level})
 
 INSTRUKSI:
-- Tulis 2-3 paragraf konten yang relevan untuk heading tersebut
+- Tulis 2-3 kalimat konten yang relevan untuk heading tersebut
 - Jangan tulis ulang judul/heading
 - Mulai langsung dengan konten paragraf
 - Gunakan bahasa Indonesia yang natural dan informatif
@@ -1149,49 +1335,64 @@ TUGAS: Tulis konten detail untuk heading "${targetHeading.text}"`;
               break;
               
             case 'under_heading':
+              // This case is now only for EMPTY paragraphs directly under headings
               if (targetHeading) {
-                systemPrompt = `Lanjutkan penulisan konten untuk bagian heading berikut:
+                systemPrompt = `Tulis konten untuk heading berikut yang masih kosong:
 
 HEADING: ${targetHeading.text} (Level ${targetHeading.level})
 
-KONTEN YANG SUDAH ADA:
-${headingContent || "(Belum ada konten)"}
-
-KALIMAT SAAT INI: ${currentText}
+KONTEKS DOKUMEN:
+${precedingContext}
 
 INSTRUKSI:
-- Lanjutkan dari akhir kalimat saat ini dengan natural
-- JANGAN mengulang teks yang sudah ada
-- Tulis maksimal 2-3 kalimat tambahan yang melengkapi
-- Pertahankan konsistensi tone dan style
-- Fokus pada value yang belum dibahas terkait topik "${targetHeading.text}"
+- Ini adalah paragraf kosong pertama di bawah heading "${targetHeading.text}"
+- Tulis 2-3 kalimat konten yang relevan untuk heading tersebut
+- Mulai langsung dengan konten paragraf yang informatif
+- Gunakan bahasa Indonesia yang natural dan professional
+- Sesuaikan kedalaman konten dengan level heading
 
-TUGAS: Lanjutkan kalimat untuk "${targetHeading.text}"`;
+TUGAS: Buat konten pembuka untuk "${targetHeading.text}"`;
               }
               break;
               
             case 'paragraph':
             case 'list':
-              systemPrompt = `Lanjutkan kalimat dari konteks berikut:
+              // ENHANCED: This handles ALL non-empty paragraphs/lists (including those under headings)
+              let blockTypeDescription = "";
+              if (currentBlock.type === "bulletListItem") {
+                blockTypeDescription = "item list bullet";
+              } else if (currentBlock.type === "numberedListItem") {
+                blockTypeDescription = "item list bernomor";
+              } else if (currentBlock.type === "checkListItem") {
+                blockTypeDescription = "item checklist";
+              } else {
+                blockTypeDescription = "paragraf";
+              }
+              
+              systemPrompt = `Lanjutkan ${blockTypeDescription} yang sudah ada dari konteks berikut:
 
 KONTEKS SEBELUMNYA:
 ${precedingContext}
 
-KALIMAT SAAT INI: ${currentText}
+TEKS SAAT INI (${blockTypeDescription}): ${currentText}
+
+${targetHeading ? `HEADING TERKAIT: ${targetHeading.text}` : ''}
 
 INSTRUKSI KHUSUS:
-- Lanjutkan langsung dari akhir kalimat saat ini
+- Lanjutkan langsung dari akhir teks saat ini: "${currentText}"
 - JANGAN mengulang atau menulis ulang teks yang sudah ada
 - Tulis maksimal 1-2 kalimat tambahan yang natural
-- Pertahankan kohesi dan koherensi dengan konteks sebelumnya
+- Pertahankan kohesi dan koherensi dengan teks yang sudah ada
 - Jaga konsistensi tone dan style penulisan
 - Berikan kelanjutan yang logis dan bermakna
+- Sesuaikan dengan format ${blockTypeDescription}
+${targetHeading ? `- Pastikan relevan dengan heading "${targetHeading.text}"` : ''}
 
-TUGAS: Lanjutkan kalimat dengan natural mengikuti alur yang sudah ada`;
+TUGAS: Lanjutkan ${blockTypeDescription} dengan natural mengikuti alur yang sudah ada`;
               break;
               
             default:
-              systemPrompt = `Lanjutkan kalimat dari konteks berikut:
+              systemPrompt = `Lanjutkan tulisan dari konteks berikut:
 
 KONTEKS SEBELUMNYA:
 ${precedingContext}
@@ -1199,11 +1400,11 @@ ${precedingContext}
 TEKS SAAT INI: ${currentText}
 
 INSTRUKSI:
-- Lanjutkan langsung dari akhir kalimat saat ini
+- Lanjutkan langsung dari akhir teks saat ini
 - Tulis 1-2 kalimat tambahan yang natural
 - Jaga konsistensi tone dan alur penulisan
 
-TUGAS: Lanjutkan kalimat mengikuti konteks dan alur yang sudah ada`;
+TUGAS: Lanjutkan tulisan mengikuti konteks dan alur yang sudah ada`;
           }
           break;
 
@@ -1229,7 +1430,7 @@ TUGAS: Lanjutkan kalimat mengikuti konteks dan alur yang sudah ada`;
 ${contextContent}
 
 INSTRUKSI:
-- Buat ringkasan dalam 2-3 paragraf
+- Buat ringkasan dalam 2-3 kalimat
 - Tangkap poin-poin utama
 - Gunakan bahasa yang jelas dan ringkas`;
           break;
@@ -1237,11 +1438,25 @@ INSTRUKSI:
         case "write_anything":
           setAIMode("continue");
           openAIModal();
-          setIsAutoContinuing(false);
+          setAIStreamingState({
+            isStreaming: false,
+            streamedText: "",
+            currentBlock: null,
+            originalText: "",
+            showControls: false,
+            position: { x: 0, y: 0 }
+          });
           return;
 
         default:
-          setIsAutoContinuing(false);
+          setAIStreamingState({
+            isStreaming: false,
+            streamedText: "",
+            currentBlock: null,
+            originalText: "",
+            showControls: false,
+            position: { x: 0, y: 0 }
+          });
           return;
       }
 
@@ -1255,32 +1470,36 @@ INSTRUKSI:
       });
 
       if (text && text.trim()) {
-        // Check if we should continue inline or create new blocks
-        if (action === "continue" && 
-            (currentBlock.type === "paragraph" || 
-             currentBlock.type === "bulletListItem" || 
-             currentBlock.type === "numberedListItem")) {
-          
-          // Use direct insertion for continuation
-          await insertAIContentDirectlyToBlock(text, currentBlock);
-        } else {
-          // Use regular block insertion for other cases
-          await insertAIContentAtCursor(text, currentBlock);
-        }
+        // Start typing animation - now handles all block types properly
+        await typeText(text.trim(), targetBlock);
       } else {
         console.warn("No text generated from AI");
         alert("⚠️ AI tidak menghasilkan konten. Silakan coba lagi.");
+        setAIStreamingState({
+          isStreaming: false,
+          streamedText: "",
+          currentBlock: null,
+          originalText: "",
+          showControls: false,
+          position: { x: 0, y: 0 }
+        });
       }
 
     } catch (error) {
       console.error("Inline AI action failed:", error);
       alert("❌ Gagal menggunakan AI. Silakan coba lagi.");
-    } finally {
-      setIsAutoContinuing(false);
+      setAIStreamingState({
+        isStreaming: false,
+        streamedText: "",
+        currentBlock: null,
+        originalText: "",
+        showControls: false,
+        position: { x: 0, y: 0 }
+      });
     }
   };
 
-  // FIXED: Handle selection change with debouncing to prevent editor shrinking
+  // FIXED: Handle selection change with better positioning logic
   const handleSelectionChange = useCallback(() => {
     try {
       // Use setTimeout to debounce and prevent conflicts with other UI events
@@ -1295,18 +1514,31 @@ INSTRUKSI:
         const currentBlock = cursorPosition.block;
         
         if (shouldShowContinueButton(currentBlock)) {
-          // Get cursor position more reliably
+          // FIXED: Get more accurate cursor position
           try {
-            const editorDom = document.querySelector('[data-node-type="blockContainer"]');
-            if (editorDom) {
-              const rect = editorDom.getBoundingClientRect();
+            // Get the current block element in the DOM
+            const blockElement = document.querySelector(`[data-id="${currentBlock.id}"]`);
+            
+            if (blockElement) {
+              const rect = blockElement.getBoundingClientRect();
               const contextText = extractContextFromCursor();
+              
+              // Position the button to the right of the current block
+              const buttonX = rect.right + 10; // 10px margin from the right edge of block
+              const buttonY = rect.top + (rect.height / 2) - 20; // Center vertically on the block
+              
+              // Make sure button stays within viewport
+              const viewportWidth = window.innerWidth;
+              const viewportHeight = window.innerHeight;
+              
+              const finalX = Math.min(buttonX, viewportWidth - 80); // Ensure button doesn't go off-screen
+              const finalY = Math.max(20, Math.min(buttonY, viewportHeight - 80)); // Keep within viewport
               
               setContinueState({
                 isVisible: true,
                 position: { 
-                  x: rect.right - 60, // Position relative to editor container
-                  y: rect.top + 10 
+                  x: finalX,
+                  y: finalY
                 },
                 currentBlock,
                 contextText
@@ -1317,6 +1549,43 @@ INSTRUKSI:
                 currentBlock,
                 isVisible: false
               }));
+            } else {
+              // Fallback: Try to get editor container position
+              const editorContainer = document.querySelector('.bn-editor') || 
+                                    document.querySelector('[role="textbox"]') ||
+                                    document.querySelector('.ProseMirror');
+              
+              if (editorContainer) {
+                const rect = editorContainer.getBoundingClientRect();
+                const contextText = extractContextFromCursor();
+                
+                setContinueState({
+                  isVisible: true,
+                  position: { 
+                    x: rect.right - 60,
+                    y: rect.top + 100 // Approximate position
+                  },
+                  currentBlock,
+                  contextText
+                });
+                
+                setInlineAIState(prev => ({ 
+                  ...prev, 
+                  currentBlock,
+                  isVisible: false
+                }));
+              } else {
+                // Last fallback: Use fixed position
+                setContinueState({
+                  isVisible: true,
+                  position: { 
+                    x: window.innerWidth - 100,
+                    y: 100
+                  },
+                  currentBlock,
+                  contextText: extractContextFromCursor()
+                });
+              }
             }
           } catch (positionError) {
             console.warn("Could not get cursor position for continue button:", positionError);
@@ -1326,7 +1595,7 @@ INSTRUKSI:
           setContinueState(prev => ({ ...prev, isVisible: false }));
           setInlineAIState(prev => ({ ...prev, isVisible: false }));
         }
-      }, 150); // Small delay to prevent conflicts
+      }, 200); // Increased delay for better stability
     } catch (error) {
       console.error("Error handling selection change:", error);
       setContinueState(prev => ({ ...prev, isVisible: false }));
@@ -1334,14 +1603,24 @@ INSTRUKSI:
     }
   }, [editor, shouldShowContinueButton, extractContextFromCursor]);
 
-  // Setup selection change listener with proper cleanup
+  // Setup selection change listener with proper cleanup and debouncing
   React.useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     let unsubscribe: (() => void) | undefined;
+    let isUpdating = false;
     
     const debouncedHandler = () => {
+      if (isUpdating) return; // Prevent multiple simultaneous updates
+      
       clearTimeout(timeoutId);
-      timeoutId = setTimeout(handleSelectionChange, 100);
+      timeoutId = setTimeout(() => {
+        isUpdating = true;
+        try {
+          handleSelectionChange();
+        } finally {
+          isUpdating = false;
+        }
+      }, 150);
     };
     
     try {
@@ -1350,12 +1629,29 @@ INSTRUKSI:
       console.error("Error setting up editor change listener:", error);
     }
     
+    // Also listen to selection changes in the document
     const selectionHandler = () => {
+      if (isUpdating) return;
+      
       clearTimeout(timeoutId);
-      timeoutId = setTimeout(handleSelectionChange, 100);
+      timeoutId = setTimeout(() => {
+        isUpdating = true;
+        try {
+          handleSelectionChange();
+        } finally {
+          isUpdating = false;
+        }
+      }, 150);
     };
     
+    // Listen to various events that might change cursor position
     document.addEventListener('selectionchange', selectionHandler);
+    document.addEventListener('click', selectionHandler);
+    document.addEventListener('keyup', selectionHandler);
+    window.addEventListener('resize', () => {
+      // Hide button on resize to prevent positioning issues
+      setContinueState(prev => ({ ...prev, isVisible: false }));
+    });
     
     return () => {
       clearTimeout(timeoutId);
@@ -1363,6 +1659,9 @@ INSTRUKSI:
         unsubscribe();
       }
       document.removeEventListener('selectionchange', selectionHandler);
+      document.removeEventListener('click', selectionHandler);
+      document.removeEventListener('keyup', selectionHandler);
+      window.removeEventListener('resize', () => {});
     };
   }, [editor, handleSelectionChange]);
 
@@ -1612,7 +1911,7 @@ INSTRUKSI:
               }
               
               contentToInsert.push({
-                type: "paragraph" as const,
+                type: "paragraph",
                 content: contentLine,
               });
               i++;
@@ -1635,7 +1934,7 @@ INSTRUKSI:
       // Fallback to simple insertion
       const lines = generatedContent.split('\n').filter((line: string) => line.trim());
       const blocksToInsert: PartialBlock[] = lines.map((line: string) => ({
-        type: "paragraph" as const,
+        type: "paragraph",
         content: line.trim(),
       }));
       
@@ -1646,7 +1945,7 @@ INSTRUKSI:
     }
   };
 
-  // FIXED: Insert content to editor with proper sentence continuation
+      // FIXED: Insert content to editor with proper sentence continuation
   const insertContentToEditor = async (behavior: string = "rewrite") => {
     if (!generatedContent || !generatedContent.trim()) {
       console.warn("No generated content to insert");
@@ -1680,7 +1979,7 @@ INSTRUKSI:
           const headingText = headingMatch[2].trim();
           
           blocksToInsert.push({
-            type: "heading" as const,
+            type: "heading",
             content: headingText,
             props: { level },
           });
@@ -1689,7 +1988,7 @@ INSTRUKSI:
         else if (line.match(/^[\*\-]\s+/)) {
           const listText = line.replace(/^[\*\-]\s+/, '').trim();
           blocksToInsert.push({
-            type: "bulletListItem" as const,
+            type: "bulletListItem",
             content: listText,
           });
         }
@@ -1697,14 +1996,14 @@ INSTRUKSI:
         else if (line.match(/^\d+\.\s+/)) {
           const listText = line.replace(/^\d+\.\s+/, '').trim();
           blocksToInsert.push({
-            type: "numberedListItem" as const,
+            type: "numberedListItem",
             content: listText,
           });
         }
         // Default paragraph
         else {
           blocksToInsert.push({
-            type: "paragraph" as const,
+            type: "paragraph",
             content: line,
           });
         }
@@ -1968,7 +2267,7 @@ INSTRUKSI:
     
     return [
       {
-        title: "Ai dengan Prompt (Input Konteks)",
+        title: "Ai dengan Prompt",
         onItemClick: () => {
           // Save cursor position saat slash menu diklik
           const cursorPosition = editor.getTextCursorPosition();
@@ -2219,7 +2518,7 @@ INSTRUKSI:
         )}
 
         {/* Enhanced Continue Writing Button with BlockNote-style animations */}
-        {continueState.isVisible && !isAutoContinuing && (
+        {continueState.isVisible && !isAutoContinuing && !aiStreamingState.isStreaming && !aiStreamingState.showControls && (
           <div
             ref={continueRef}
             className="continue-button-wrapper"
@@ -2228,10 +2527,11 @@ INSTRUKSI:
               left: continueState.position.x,
               top: continueState.position.y,
               zIndex: 999,
-              pointerEvents: 'auto'
+              pointerEvents: 'auto',
+              transition: 'all 0.2s ease-out' // Smooth transition for position changes
             }}
           >
-            <Tooltip label="Continue writing with AI" position="top" withArrow>
+            <Tooltip label="Lanjutkan Menulis dengan AI" position="top" withArrow>
               <ActionIcon
                 className="continue-button"
                 size="lg"
@@ -2259,25 +2559,428 @@ INSTRUKSI:
           </div>
         )}
 
-        {/* Auto Continue Loading Overlay */}
-        {isAutoContinuing && (
-          <Overlay opacity={0.3}>
-            <div style={{ 
-              position: 'absolute', 
-              top: '50%', 
-              left: '50%', 
-              transform: 'translate(-50%, -50%)',
-              background: computedColorScheme === "dark" ? "#2a2a2a" : "white",
-              padding: '20px',
-              borderRadius: '12px',
-              boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)'
-            }}>
-              <Group gap="md">
-                <Loader size="md" color="blue" />
-                <Text fw={500} c="blue">AI sedang melanjutkan tulisan...</Text>
-              </Group>
+        {/* NEW: AI Streaming Controls */}
+        {aiStreamingState.showControls && aiStreamingState.currentBlock && (
+          <div
+            ref={streamingControlsRef}
+            className="ai-streaming-controls"
+            style={{
+              position: 'fixed',
+              right: '20px',
+              bottom: '20px',
+              zIndex: 1000,
+              pointerEvents: 'auto'
+            }}
+          >
+            <Paper
+              p="md"
+              radius="lg"
+              className="ai-streaming-overlay"
+              style={{
+                background: computedColorScheme === "dark" 
+                  ? "linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(147, 197, 253, 0.15))"
+                  : "linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 197, 253, 0.1))",
+                border: `2px solid ${computedColorScheme === "dark" ? "rgba(59, 130, 246, 0.4)" : "rgba(59, 130, 246, 0.3)"}`,
+                backdropFilter: 'blur(10px)',
+                boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)'
+              }}
+            >
+              <Stack gap="sm" align="center">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <IconSparkles size={18} color="#3b82f6" />
+                  <Text size="sm" fw={500} c="blue">
+                    AI telah selesai menulis
+                  </Text>
+                </div>
+                
+                <Group gap="sm">
+                  <Button
+                    size="sm"
+                    variant="gradient"
+                    gradient={{ from: 'green', to: 'teal' }}
+                    leftSection={<IconCheck size={16} />}
+                    onClick={acceptAIContent}
+                    style={{ fontWeight: 600 }}
+                  >
+                    Setuju
+                  </Button>
+                  
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    color="red"
+                    leftSection={<IconX size={16} />}
+                    onClick={revertAIContent}
+                    style={{ fontWeight: 600 }}
+                  >
+                    kembalikan
+                  </Button>
+                  
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    color="blue"
+                    leftSection={<IconRefresh size={16} />}
+                    onClick={() => {
+                      revertAIContent();
+                      setTimeout(() => handleInlineAIAction('continue'), 100);
+                    }}
+                    style={{ fontWeight: 600 }}
+                  >
+                    Mulai Ulang
+                  </Button>
+                </Group>
+              </Stack>
+            </Paper>
+          </div>
+        )}
+
+        {/* MODERN & ELEGANT: AI Processing Indicator */}
+        {(isAILoading && !aiModalOpened) && (
+          <>
+            {/* Glassmorphism overlay with modern design */}
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6))',
+                backdropFilter: 'blur(20px)',
+                zIndex: 999999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'auto'
+              }}
+            >
+              <div
+                style={{
+                  background: computedColorScheme === "dark" 
+                    ? 'linear-gradient(145deg, rgba(26, 27, 30, 0.95), rgba(30, 32, 36, 0.95))'
+                    : 'linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95))',
+                  border: computedColorScheme === "dark"
+                    ? '1px solid rgba(59, 130, 246, 0.3)'
+                    : '1px solid rgba(59, 130, 246, 0.2)',
+                  borderRadius: '20px',
+                  padding: '40px 32px',
+                  boxShadow: computedColorScheme === "dark"
+                    ? '0 25px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05)'
+                    : '0 25px 50px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+                  minWidth: '380px',
+                  maxWidth: '420px',
+                  textAlign: 'center',
+                  backdropFilter: 'blur(20px)',
+                  animation: 'fade-in 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                  marginTop: '80px'
+                }}
+              >
+                {/* Animated icon container */}
+                <div style={{ 
+                  marginBottom: '24px',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    width: '80px',
+                    height: '80px',
+                    background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto',
+                    animation: 'sparkle-pulse 2s ease-in-out infinite',
+                    boxShadow: '0 8px 32px rgba(59, 130, 246, 0.3)'
+                  }}>
+                    <IconSparkles 
+                      size={32} 
+                      color="white"
+                      style={{
+                        animation: 'sparkle-rotate 3s linear infinite'
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                {/* Modern typography */}
+                <Text 
+                  size="xl" 
+                  fw={700} 
+                  style={{ 
+                    background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    marginBottom: '8px',
+                    fontSize: '24px'
+                  }}
+                >
+                  AI sedang memproses
+                </Text>
+                <Text 
+                  size="md" 
+                  c="dimmed"
+                  style={{ 
+                    fontSize: '16px',
+                    lineHeight: 1.5,
+                    opacity: 0.8
+                  }}
+                >
+                  Menganalisis konten dan menghasilkan teks berkualitas
+                </Text>
+              </div>
             </div>
-          </Overlay>
+            
+            {/* Subtle top notification bar */}
+            <div
+              style={{
+                position: 'fixed',
+                top: '100px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 999998,
+                pointerEvents: 'none'
+              }}
+            >
+              <div
+                style={{
+                  background: 'linear-gradient(90deg, #3b82f6, #6366f1)',
+                  color: 'white',
+                  padding: '12px 24px',
+                  borderRadius: '50px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  boxShadow: '0 8px 25px rgba(59, 130, 246, 0.3)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  animation: 'slide-up 0.4s ease-out'
+                }}
+              >
+                🚀 Processing...
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* MODERN & ELEGANT: AI Streaming Indicator */}
+        {aiStreamingState.isStreaming && (
+          <>
+            {/* Sleek streaming indicator */}
+            <div
+              style={{
+                position: 'fixed',
+                top: '100px',
+                right: '24px',
+                zIndex: 999997,
+                pointerEvents: 'none'
+              }}
+            >
+              <div
+                style={{
+                  background: computedColorScheme === "dark" 
+                    ? 'linear-gradient(145deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.15))'
+                    : 'linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95))',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  borderRadius: '16px',
+                  padding: '16px 20px',
+                  boxShadow: computedColorScheme === "dark"
+                    ? '0 12px 32px rgba(16, 185, 129, 0.2)'
+                    : '0 12px 32px rgba(16, 185, 129, 0.15)',
+                  minWidth: '300px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  backdropFilter: 'blur(20px)',
+                  animation: 'slide-up 0.4s ease-out'
+                }}
+              >
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  animation: 'sparkle-pulse 2s ease-in-out infinite'
+                }}>
+                  <IconSparkles 
+                    size={20} 
+                    color="white"
+                    style={{
+                      animation: 'sparkle-rotate 2s linear infinite'
+                    }}
+                  />
+                </div>
+                <div>
+                  <Text 
+                    size="md" 
+                    fw={600}
+                    style={{ 
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      marginBottom: '2px'
+                    }}
+                  >
+                    AI sedang menulis
+                  </Text>
+                  <Text size="sm" c="dimmed" style={{ opacity: 0.7 }}>
+                    Mengetik dengan animasi
+                  </Text>
+                </div>
+              </div>
+            </div>
+            
+            {/* Floating typing indicator */}
+            <div
+              style={{
+                position: 'fixed',
+                top: '120px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 999996,
+                pointerEvents: 'none'
+              }}
+            >
+              <div
+                style={{
+                  background: 'linear-gradient(90deg, #10b981, #059669)',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '20px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  animation: 'sparkle-float 3s ease-in-out infinite'
+                }}
+              >
+                ⌨️ Menulis...
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* MODERN & ELEGANT: Auto Continue */}
+        {isAutoContinuing && (
+          <>
+            {/* Premium glassmorphism overlay */}
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(124, 58, 237, 0.2))',
+                backdropFilter: 'blur(20px)',
+                zIndex: 999995,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <div
+                style={{
+                  background: computedColorScheme === "dark" 
+                    ? 'linear-gradient(145deg, rgba(26, 27, 30, 0.95), rgba(30, 32, 36, 0.95))'
+                    : 'linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95))',
+                  border: computedColorScheme === "dark"
+                    ? '1px solid rgba(139, 92, 246, 0.3)'
+                    : '1px solid rgba(139, 92, 246, 0.2)',
+                  borderRadius: '20px',
+                  padding: '40px 32px',
+                  boxShadow: computedColorScheme === "dark"
+                    ? '0 25px 50px rgba(139, 92, 246, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05)'
+                    : '0 25px 50px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+                  minWidth: '380px',
+                  maxWidth: '420px',
+                  textAlign: 'center',
+                  backdropFilter: 'blur(20px)',
+                  animation: 'fade-in 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                  marginTop: '80px'
+                }}
+              >
+                <div style={{ 
+                  marginBottom: '24px',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    width: '80px',
+                    height: '80px',
+                    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto',
+                    animation: 'sparkle-pulse 2s ease-in-out infinite',
+                    boxShadow: '0 8px 32px rgba(139, 92, 246, 0.3)'
+                  }}>
+                    <IconWand 
+                      size={32} 
+                      color="white"
+                      style={{
+                        animation: 'sparkle-rotate 3s linear infinite'
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                <Text 
+                  size="xl" 
+                  fw={700} 
+                  style={{ 
+                    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    marginBottom: '8px',
+                    fontSize: '24px'
+                  }}
+                >
+                  AI Auto Continue
+                </Text>
+                <Text 
+                  size="md" 
+                  c="dimmed"
+                  style={{ 
+                    fontSize: '16px',
+                    lineHeight: 1.5,
+                    opacity: 0.8
+                  }}
+                >
+                  Melanjutkan tulisan dengan konteks cerdas
+                </Text>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Minimal status indicator */}
+        {(aiStreamingState.isStreaming || isAILoading || isAutoContinuing) && (
+          <div
+            style={{
+              position: 'fixed',
+              bottom: '24px',
+              right: '24px',
+              zIndex: 999999,
+              background: computedColorScheme === "dark" 
+                ? 'rgba(34, 197, 94, 0.9)' 
+                : 'rgba(34, 197, 94, 1)',
+              color: 'white',
+              padding: '8px 12px',
+              borderRadius: '12px',
+              fontSize: '12px',
+              fontWeight: 600,
+              pointerEvents: 'none',
+              boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
+              backdropFilter: 'blur(10px)'
+            }}
+          >
+            <IconSparkles size={12} /> AI Active
+          </div>
         )}
       </div>
 
@@ -2297,7 +3000,7 @@ INSTRUKSI:
             <Text fw={700} size="xl">
               {aiMode === "continue" ? " AI Lanjutan Konten" : 
                aiMode === "auto" ? " AI Otomatis - Tanpa Prompt" :
-               "AI dengan Prompt (INPUT KONTEKS)"}
+               "AI dengan Prompt"}
             </Text>
           </Group>
         }
@@ -2336,9 +3039,6 @@ INSTRUKSI:
                         }
                       }}
                     />
-                    <Text size="sm" c="dimmed">
-                     Untuk mode "Struktur" - jelaskan topik secara umum. Untuk mode "Konten" - masukkan bab/sub bab spesifik. Untuk mode "Kalimat" - berikan konteks atau arah lanjutan tulisan.
-                    </Text>
                   </Stack>
                 </Paper>
               )}
@@ -2445,7 +3145,7 @@ INSTRUKSI:
               <Group justify="space-between" align="center">
                 <div>
                   <Text fw={600} size="lg" c={aiMode === "auto" ? "blue" : "blue"} component="span">
-                    ✨ Konten Yang Dihasilkan
+                    <IconSparkles size={20} /> Konten Yang Dihasilkan
                   </Text>
                   {aiMode === "continue" && (
                     <Badge size="sm" color="green" variant="light" ml="sm">
