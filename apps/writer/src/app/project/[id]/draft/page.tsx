@@ -2701,7 +2701,7 @@ const handleSubmitToTeacher = async () => {
                             isScanning ? (
                               <Loader size={18} color="white" />
                             ) : (
-                              <IconUpload size={18} />
+                              <IconFileText size={18} />
                             )
                           } 
                           radius="md" 
@@ -2713,7 +2713,7 @@ const handleSubmitToTeacher = async () => {
                           }}
                           disabled={isScanning}
                         >
-                          Simpan Draf
+                          Simpan Draft
                         </Button>
 
                         <Button 
@@ -3616,7 +3616,7 @@ const handleSubmitToTeacher = async () => {
                         isScanning ? (
                           <Loader size={18} color="white" />
                         ) : (
-                          <IconUpload size={18} />
+                          <IconFileText size={18} />
                         )
                       } 
                       radius="md" 
@@ -3628,7 +3628,7 @@ const handleSubmitToTeacher = async () => {
                       }}
                       disabled={isScanning}
                     >
-                      Simpan Draf
+                      Simpan Draft
                     </Button>
 
                     <Button 

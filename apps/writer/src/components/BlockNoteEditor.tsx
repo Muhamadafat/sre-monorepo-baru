@@ -29,6 +29,10 @@ import {
   Tooltip,
   useComputedColorScheme,
   Overlay,
+  Progress,
+  Box,
+  RingProgress,
+  Center,
 } from "@mantine/core";
 import { useDisclosure, useClickOutside } from "@mantine/hooks";
 import {
@@ -46,6 +50,10 @@ import {
   IconAutomation,
   IconX,
   IconRefresh,
+  IconArrowLeft,
+  IconArrowRight,
+  IconArrowBackUp,  
+  IconArrowForwardUp
 } from "@tabler/icons-react";
 import { generateText } from "ai";
 import React, { forwardRef, useCallback, useImperativeHandle } from "react";
@@ -68,12 +76,24 @@ interface CursorContext {
   precedingContext: string;
 }
 
-// Interfaces
+// Enhanced AI Progress State
+interface AIProgressState {
+  isLoading: boolean;
+  progress: number;
+  stage: string;
+  estimatedTime: number;
+  startTime: number;
+}
+
+// Enhanced interfaces
 interface BlockNoteEditorRef {
   getContent: () => Block[];
   getEditor: () => BlockNoteEditor;
   insertCitation: (citationText: string) => void;
-  // tambahkan method lain yang diperlukan
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
 }
 
 //article interface
@@ -83,6 +103,7 @@ interface Article {
   att_background: string;
   att_url: string;
 }
+
 interface BlockNoteEditorProps {
   onContentChange?: (content: Block[]) => void;
   style?: React.CSSProperties;
@@ -99,6 +120,7 @@ interface BlockNoteEditorProps {
   isFromBrainstorming?: boolean;
   nodesData?: Article[];
 }
+
 interface ContinueWritingState {
   isVisible: boolean;
   position: { x: number; y: number };
@@ -113,7 +135,7 @@ interface InlineAIState {
   query: string;
 }
 
-// NEW: Interface untuk AI Streaming State
+// Enhanced AI Streaming State with progress
 interface AIStreamingState {
   isStreaming: boolean;
   streamedText: string;
@@ -121,6 +143,16 @@ interface AIStreamingState {
   originalText: string;
   showControls: boolean;
   position: { x: number; y: number };
+  progress: number;
+  totalChunks: number;
+  currentChunk: number;
+}
+
+// Undo/Redo State
+interface UndoRedoState {
+  history: Block[][];
+  currentIndex: number;
+  maxHistorySize: number;
 }
 
 // Template interfaces - Fixed to include all required properties
@@ -143,7 +175,7 @@ interface AIAutoTemplate {
   behavior: string;
 }
 
-// CSS Animations - Added for BlockNote-style animations + Streaming animations
+// Enhanced CSS Animations with progress animations
 const animationStyles = `
   @keyframes sparkle-pulse {
     0%, 100% {
@@ -212,6 +244,11 @@ const animationStyles = `
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  @keyframes progress-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
   }
 
   .continue-button {
@@ -284,6 +321,10 @@ const animationStyles = `
     padding: 4px;
     animation: fade-in 0.3s ease-out;
   }
+
+  .ai-progress-container {
+    animation: progress-pulse 2s infinite;
+  }
 `;
 
 // Main component
@@ -313,15 +354,28 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     };
   }, []);
   
-  // Core states
-  const [isAILoading, setIsAILoading] = React.useState(false);
+  // Enhanced Core states with progress
+  const [aiProgressState, setAIProgressState] = React.useState<AIProgressState>({
+    isLoading: false,
+    progress: 0,
+    stage: "",
+    estimatedTime: 0,
+    startTime: 0,
+  });
   const [aiModalOpened, { open: openAIModal, close: closeAIModal }] = useDisclosure(false);
   const [prompt, setPrompt] = React.useState("");
   const [generatedContent, setGeneratedContent] = React.useState("");
   const [aiMode, setAIMode] = React.useState<"new" | "continue" | "auto">("new");
   const [isAutoContinuing, setIsAutoContinuing] = React.useState(false);
-  const [currentAIType, setCurrentAIType] = React.useState<string>("structure"); // Track current AI type
-  const [savedCursorPosition, setSavedCursorPosition] = React.useState<Block | null>(null); // Save cursor position
+  const [currentAIType, setCurrentAIType] = React.useState<string>("structure");
+  const [savedCursorPosition, setSavedCursorPosition] = React.useState<Block | null>(null);
+
+  // Undo/Redo State
+  const [undoRedoState, setUndoRedoState] = React.useState<UndoRedoState>({
+    history: [],
+    currentIndex: -1,
+    maxHistorySize: 50,
+  });
 
   // Continue writing state
   const [continueState, setContinueState] = React.useState<ContinueWritingState>({
@@ -341,14 +395,17 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
   });
   const inlineAIRef = useClickOutside(() => setInlineAIState(prev => ({ ...prev, isVisible: false })));
 
-  // NEW: AI Streaming state
+  // Enhanced AI Streaming state with progress
   const [aiStreamingState, setAIStreamingState] = React.useState<AIStreamingState>({
     isStreaming: false,
     streamedText: "",
     currentBlock: null,
     originalText: "",
     showControls: false,
-    position: { x: 0, y: 0 }
+    position: { x: 0, y: 0 },
+    progress: 0,
+    totalChunks: 0,
+    currentChunk: 0,
   });
   const streamingControlsRef = useClickOutside(() => {
     if (aiStreamingState.showControls && !aiStreamingState.isStreaming) {
@@ -377,7 +434,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     }
   }, []);
 
-  // BlockNote Editor setup
+  // BlockNote Editor setup with history tracking
   const editor = useCreateBlockNote({
     initialContent: [
       {
@@ -403,11 +460,240 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     },
   });
 
+  // Check if undo/redo is available
+  const canUndo = useCallback(() => {
+    return undoRedoState.currentIndex > 0;
+  }, [undoRedoState.currentIndex]);
+
+  const canRedo = useCallback(() => {
+    return undoRedoState.currentIndex < undoRedoState.history.length - 1;
+  }, [undoRedoState.currentIndex, undoRedoState.history.length]);
+
+  // Enhanced undo/redo state management
+  const isUndoRedoOperation = React.useRef(false);
+  const lastSavedContent = React.useRef<string>("");
+
+  // Save state to history for undo/redo with deduplication
+  const saveToHistory = useCallback((blocks: Block[]) => {
+    // Skip saving during undo/redo operations
+    if (isUndoRedoOperation.current) return;
+    
+    const currentContent = JSON.stringify(blocks);
+    
+    // Skip if content hasn't actually changed
+    if (currentContent === lastSavedContent.current) return;
+    
+    lastSavedContent.current = currentContent;
+    
+    setUndoRedoState(prev => {
+      const newHistory = [...prev.history];
+      const newIndex = prev.currentIndex + 1;
+      
+      // Remove any future history if we're not at the end
+      if (newIndex < newHistory.length) {
+        newHistory.splice(newIndex);
+      }
+      
+      // Add new state
+      newHistory.push(JSON.parse(currentContent));
+      
+      // Limit history size
+      if (newHistory.length > prev.maxHistorySize) {
+        newHistory.shift();
+        return {
+          ...prev,
+          history: newHistory,
+          currentIndex: newHistory.length - 1,
+        };
+      }
+      
+      return {
+        ...prev,
+        history: newHistory,
+        currentIndex: newIndex,
+      };
+    });
+  }, []);
+
+  // Initialize history with initial content
+  React.useEffect(() => {
+    if (editor && undoRedoState.history.length === 0) {
+      const initialContent = editor.document;
+      lastSavedContent.current = JSON.stringify(initialContent);
+      setUndoRedoState(prev => ({
+        ...prev,
+        history: [JSON.parse(JSON.stringify(initialContent))],
+        currentIndex: 0,
+      }));
+    }
+  }, [editor, undoRedoState.history.length]);
+
+  // Track content changes for undo/redo with debouncing
+  React.useEffect(() => {
+    if (!editor) return;
+
+    let timeoutId: NodeJS.Timeout;
+    let isProcessing = false;
+
+    const handleChange = () => {
+      // Skip if already processing or during undo/redo
+      if (isProcessing || isUndoRedoOperation.current) return;
+      
+      isProcessing = true;
+      clearTimeout(timeoutId);
+      
+      timeoutId = setTimeout(() => {
+        try {
+          saveToHistory(editor.document);
+        } finally {
+          isProcessing = false;
+        }
+      }, 800); // Reduced debounce time for better responsiveness
+    };
+
+    let unsubscribe: (() => void) | undefined;
+    
+    try {
+      unsubscribe = editor.onChange?.(handleChange);
+    } catch (error) {
+      console.error("Error setting up editor change listener:", error);
+    }
+
+    return () => {
+      clearTimeout(timeoutId);
+      isProcessing = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [editor, saveToHistory]);
+
+  // Enhanced Undo function
+  const undo = useCallback(() => {
+    if (!editor || !canUndo()) return;
+    
+    isUndoRedoOperation.current = true;
+    
+    try {
+      setUndoRedoState(prev => {
+        if (prev.currentIndex > 0) {
+          const newIndex = prev.currentIndex - 1;
+          const previousState = prev.history[newIndex];
+          
+          if (previousState) {
+            // Update last saved content to prevent loops
+            lastSavedContent.current = JSON.stringify(previousState);
+            
+            // Restore previous state
+            setTimeout(() => {
+              try {
+                editor.replaceBlocks(editor.document, previousState);
+              } catch (error) {
+                console.error("Error during undo:", error);
+              } finally {
+                isUndoRedoOperation.current = false;
+              }
+            }, 0);
+          }
+          
+          return {
+            ...prev,
+            currentIndex: newIndex,
+          };
+        }
+        
+        isUndoRedoOperation.current = false;
+        return prev;
+      });
+    } catch (error) {
+      console.error("Undo operation failed:", error);
+      isUndoRedoOperation.current = false;
+    }
+  }, [editor, canUndo]);
+
+  // Enhanced Redo function
+  const redo = useCallback(() => {
+    if (!editor || !canRedo()) return;
+    
+    isUndoRedoOperation.current = true;
+    
+    try {
+      setUndoRedoState(prev => {
+        if (prev.currentIndex < prev.history.length - 1) {
+          const newIndex = prev.currentIndex + 1;
+          const nextState = prev.history[newIndex];
+          
+          if (nextState) {
+            // Update last saved content to prevent loops
+            lastSavedContent.current = JSON.stringify(nextState);
+            
+            // Restore next state
+            setTimeout(() => {
+              try {
+                editor.replaceBlocks(editor.document, nextState);
+              } catch (error) {
+                console.error("Error during redo:", error);
+              } finally {
+                isUndoRedoOperation.current = false;
+              }
+            }, 0);
+          }
+          
+          return {
+            ...prev,
+            currentIndex: newIndex,
+          };
+        }
+        
+        isUndoRedoOperation.current = false;
+        return prev;
+      });
+    } catch (error) {
+      console.error("Redo operation failed:", error);
+      isUndoRedoOperation.current = false;
+    }
+  }, [editor, canRedo]);
+
+  // Enhanced keyboard shortcuts for undo/redo
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check if editor is focused
+      const editorElement = document.querySelector('.bn-editor') || 
+                          document.querySelector('[role="textbox"]') ||
+                          document.querySelector('.ProseMirror');
+      
+      if (!editorElement || !document.contains(editorElement)) return;
+      
+      const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+      
+      if (isCtrlOrCmd && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (canUndo()) {
+          undo();
+        }
+      } else if (isCtrlOrCmd && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (canRedo()) {
+          redo();
+        }
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleKeyDown, true);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [undo, redo, canUndo, canRedo]);
+
+  // Enhanced imperative handle with undo/redo
   useImperativeHandle(ref, () => ({
     getEditor: () => editor,
     getContent: () => editor.document,
     insertCitation: (citationText: string) => {
-        // const cursor = editor.getTextCursorPosition();
         if (citationText) {
           editor.insertInlineContent(
             [
@@ -420,7 +706,31 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           );
         }
     },
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   }));
+
+  // Enhanced AI Progress simulation
+  const simulateAIProgress = useCallback(async (
+    totalDuration: number = 8000,
+    onProgress: (progress: number, stage: string) => void
+  ) => {
+    const stages = [
+      { progress: 15, stage: "Memproses permintaan...", duration: 1000 },
+      { progress: 30, stage: "Menganalisis konteks...", duration: 1500 },
+      { progress: 50, stage: "Menghasilkan konten...", duration: 2500 },
+      { progress: 75, stage: "Menyempurnakan hasil...", duration: 2000 },
+      { progress: 90, stage: "Memformat konten...", duration: 800 },
+      { progress: 100, stage: "Selesai!", duration: 200 },
+    ];
+
+    for (const stage of stages) {
+      await new Promise(resolve => setTimeout(resolve, stage.duration));
+      onProgress(stage.progress, stage.stage);
+    }
+  }, []);
 
   // AI Templates - Only 3 modes - FIXED with proper typing
   const aiTemplates: AITemplate[] = [
@@ -503,17 +813,25 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     }
   ];
 
-  // NEW: Utility function untuk typing animation
+  // Enhanced typing animation with progress
   const typeText = async (text: string, targetBlock: Block, delay: number = 30): Promise<void> => {
     return new Promise(async (resolve) => {
       let currentIndex = 0;
       const words = text.split(' ');
       let insertedBlock: Block | null = null;
       
+      // Initialize progress tracking
+      setAIStreamingState(prev => ({
+        ...prev,
+        isStreaming: true,
+        totalChunks: words.length,
+        currentChunk: 0,
+        progress: 0,
+      }));
+      
       // Check if target block is a heading - if so, create new paragraph below it
       if (targetBlock.type === "heading") {
         try {
-          // Create new paragraph block for the AI content
           const newParagraphBlocks: PartialBlock[] = [{
             type: "paragraph",
             content: "",
@@ -521,12 +839,10 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           
           await editor.insertBlocks(newParagraphBlocks, targetBlock, "after");
           
-          // Get the newly inserted block
           const allBlocks = editor.document;
           const targetIndex = allBlocks.findIndex(block => block.id === targetBlock.id);
           insertedBlock = allBlocks[targetIndex + 1];
           
-          // Update streaming state with the new block
           setAIStreamingState(prev => ({
             ...prev,
             currentBlock: insertedBlock,
@@ -539,7 +855,6 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           return;
         }
       } else {
-        // For non-heading blocks (paragraph, list items, etc.), continue in the same block
         insertedBlock = targetBlock;
       }
       
@@ -551,23 +866,18 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       const typeNextWord = () => {
         if (currentIndex < words.length) {
           const wordsToShow = words.slice(0, currentIndex + 1).join(' ');
+          const progress = Math.round((currentIndex / words.length) * 100);
           
-          // Update the block content with typed text
           try {
-            // For heading case, we're typing in the new paragraph
             if (targetBlock.type === "heading") {
-              // Simply update the paragraph block content
               editor.updateBlock(insertedBlock!, {
                 type: "paragraph",
                 content: wordsToShow,
               });
             } else {
-              // FIXED: For regular blocks, ALWAYS preserve original text and append AI text
               let newContent = "";
               
-              // Always start with original text (preserve existing content)
               if (aiStreamingState.originalText && aiStreamingState.originalText.trim()) {
-                // Check if we need to add space before new content
                 const needsSpace = !aiStreamingState.originalText.endsWith(' ') && 
                   !aiStreamingState.originalText.endsWith('.') && 
                   !aiStreamingState.originalText.endsWith(',') && 
@@ -578,25 +888,24 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
                   !aiStreamingState.originalText.endsWith('-') &&
                   !aiStreamingState.originalText.endsWith('—');
                 
-                // Combine original text + space (if needed) + AI text
                 newContent = aiStreamingState.originalText + (needsSpace ? ' ' : '') + wordsToShow;
               } else {
-                // If no original text, just use AI text
                 newContent = wordsToShow;
               }
               
-              // Update block with COMBINED content (original + AI)
               editor.updateBlock(insertedBlock!, {
-              type: insertedBlock!.type as "paragraph" | "heading" | "bulletListItem" | "numberedListItem",
-              content: newContent,
-            });
+                type: insertedBlock!.type as "paragraph" | "heading" | "bulletListItem" | "numberedListItem",
+                content: newContent,
+              });
             }
             
-            // Update streaming state
+            // Update streaming state with progress
             setAIStreamingState(prev => ({
               ...prev,
               streamedText: wordsToShow,
-              currentBlock: insertedBlock
+              currentBlock: insertedBlock,
+              currentChunk: currentIndex + 1,
+              progress,
             }));
             
           } catch (error) {
@@ -610,7 +919,8 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           setAIStreamingState(prev => ({
             ...prev,
             isStreaming: false,
-            showControls: true
+            showControls: true,
+            progress: 100,
           }));
           resolve();
         }
@@ -620,7 +930,59 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     });
   };
 
-  // NEW: Accept AI content
+  // Enhanced AI Generation with progress
+  const handleAIGenerationWithProgress = async (userPrompt: string = "", type: string = "structure", behavior: string = "rewrite") => {
+    if (!aiModel) {
+      alert("❌ AI model tidak tersedia. Silakan periksa konfigurasi API key.");
+      return;
+    }
+
+    try {
+      setAIProgressState(prev => ({
+        ...prev,
+        isLoading: true,
+        progress: 0,
+        stage: "Memulai...",
+        startTime: Date.now(),
+      }));
+
+      // Start progress simulation
+      const progressPromise = simulateAIProgress(8000, (progress, stage) => {
+        setAIProgressState(prev => ({
+          ...prev,
+          progress,
+          stage,
+        }));
+      });
+
+      // Generate AI content (existing logic)
+      const generatedText = await generateAIContent(userPrompt, type);
+
+      // Wait for progress to complete
+      await progressPromise;
+
+      setAIProgressState(prev => ({
+        ...prev,
+        isLoading: false,
+        progress: 100,
+        stage: "Selesai!",
+      }));
+      
+      return generatedText;
+    } catch (error) {
+      console.error("AI generation failed:", error);
+      setAIProgressState(prev => ({
+        ...prev,
+        isLoading: false,
+        progress: 0,
+        stage: "Error",
+      }));
+      alert("❌ Gagal menghasilkan konten AI. Silakan coba lagi.");
+      return "";
+    }
+  };
+
+  // Accept AI content
   const acceptAIContent = () => {
     setAIStreamingState({
       isStreaming: false,
@@ -628,36 +990,31 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       currentBlock: null,
       originalText: "",
       showControls: false,
-      position: { x: 0, y: 0 }
+      position: { x: 0, y: 0 },
+      progress: 0,
+      totalChunks: 0,
+      currentChunk: 0,
     });
     setContinueState(prev => ({ ...prev, isVisible: false }));
   };
 
-  // NEW: Revert AI content
+  // Revert AI content
   const revertAIContent = () => {
     if (aiStreamingState.currentBlock) {
       try {
-        // Check if the current block was originally a heading
         const allBlocks = editor.document;
         const currentIndex = allBlocks.findIndex(block => block.id === aiStreamingState.currentBlock!.id);
         
-        // If this was a paragraph created below a heading, remove it
         if (currentIndex > 0 && allBlocks[currentIndex - 1].type === "heading" && 
             aiStreamingState.originalText === "") {
-          // Remove the paragraph block that was created for AI content
           editor.removeBlocks([aiStreamingState.currentBlock]);
-          
-          // Set cursor back to the heading
           const headingBlock = allBlocks[currentIndex - 1];
           editor.setTextCursorPosition(headingBlock, "end");
         } else {
-          // FIXED: Restore ONLY original text (remove AI addition)
           editor.updateBlock(aiStreamingState.currentBlock, {
-          type: aiStreamingState.currentBlock.type as "paragraph" | "heading" | "bulletListItem" | "numberedListItem",
-          content: aiStreamingState.originalText,
-        });
-
-          // Position cursor at end of original content
+            type: aiStreamingState.currentBlock.type as "paragraph" | "heading" | "bulletListItem" | "numberedListItem",
+            content: aiStreamingState.originalText,
+          });
           editor.setTextCursorPosition(aiStreamingState.currentBlock, "end");
         }
         
@@ -672,7 +1029,10 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       currentBlock: null,
       originalText: "",
       showControls: false,
-      position: { x: 0, y: 0 }
+      position: { x: 0, y: 0 },
+      progress: 0,
+      totalChunks: 0,
+      currentChunk: 0,
     });
     setContinueState(prev => ({ ...prev, isVisible: false }));
   };
@@ -824,11 +1184,18 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     setPrompt("");
     setGeneratedContent("");
     setAIMode("new");
-    setCurrentAIType("structure"); // Reset current AI type
-    setSavedCursorPosition(null); // Reset saved cursor position
+    setCurrentAIType("structure");
+    setSavedCursorPosition(null);
+    setAIProgressState({
+      isLoading: false,
+      progress: 0,
+      stage: "",
+      estimatedTime: 0,
+      startTime: 0,
+    });
   };
 
-  // NEW: Handle AI Auto Generation - tanpa prompt
+  // Handle AI Auto Generation - tanpa prompt
   const handleAIAutoGeneration = async (type: string = "structure", behavior: string = "rewrite") => {
     if (!aiModel) {
       alert("❌ AI model tidak tersedia. Silakan periksa konfigurasi API key.");
@@ -847,226 +1214,16 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       }
     }
     
-    setIsAILoading(true);
+    // Use enhanced progress generation
+    const generatedText = await handleAIGenerationWithProgress("", type, behavior);
     
-    try {
-      let systemPrompt = "";
-      const editorBlocks = editor.document;
-      let contextContent = "";
-      
-      // Extract current content for context
-      editorBlocks.forEach(block => {
-        const text = extractTextFromBlock(block);
-        if (text) {
-          if (block.type === "heading") {
-            const level = (block.props as { level?: number })?.level || 1;
-            const headingPrefix = '#'.repeat(level);
-            contextContent += `\n${headingPrefix} ${text}\n`;
-          } else {
-            contextContent += `${text}\n`;
-          }
-        }
-      });
-
-      // Generate automatic prompts based on context
-      switch (type) {
-        case "structure":
-          if (contextContent.trim()) {
-            // Ada konten existing - analisis untuk buat struktur yang lebih baik
-            systemPrompt = `Analisis konten berikut dan buat struktur outline yang lebih baik dan terorganisir:
-
-KONTEN YANG ADA:
-${contextContent}
-
-TUGAS ANDA:
-1. Analisis topik utama dari konten yang ada
-2. Buat struktur heading yang lebih terorganisir dan logis
-3. Perbaiki hierarki informasi jika diperlukan
-
-ATURAN STRUKTUR:
-- Gunakan # untuk judul utama (hanya 1)
-- Gunakan ## untuk bab-bab utama (level 2)
-- Gunakan ### untuk sub-bab (level 3)
-- Gunakan #### untuk detail bagian (level 4)
-
-INSTRUKSI PENTING:
-- HANYA tulis heading dan subheading
-- JANGAN tulis konten paragraf apapun
-- Buat struktur yang komprehensif berdasarkan analisis konten existing
-- Struktur ini akan mengganti semua konten yang ada
-
-Buat outline struktur yang lebih baik dari konten yang sudah ada.`;
-          } else {
-            // Tidak ada konten - buat struktur umum
-            systemPrompt = `Buat struktur outline artikel umum yang komprehensif dan berguna.
-
-TUGAS: Buat struktur artikel yang bisa digunakan untuk berbagai topik umum.
-
-ATURAN STRUKTUR:
-- Gunakan # untuk judul utama
-- Gunakan ## untuk bab-bab utama
-- Gunakan ### untuk sub-bab
-- Gunakan #### untuk detail bagian
-
-INSTRUKSI:
-- HANYA tulis heading dan subheading
-- JANGAN tulis konten paragraf
-- Buat struktur yang fleksibel dan dapat disesuaikan
-- Fokus pada struktur yang logis dan mudah dipahami
-
-Contoh struktur yang baik mencakup: Pendahuluan, Pembahasan Utama, Analisis, Kesimpulan, dll.`;
-          }
-          break;
-
-        case "content":
-          // Auto content generation berdasarkan heading aktif
-          const cursorPosition = editor.getTextCursorPosition();
-          let currentHeading = "";
-          let headingLevel = 1;
-          
-          if (cursorPosition) {
-            const allBlocks = editor.document;
-            const currentIndex = allBlocks.findIndex(block => block.id === cursorPosition.block.id);
-            
-            // Find the governing heading by looking backwards
-            for (let i = currentIndex; i >= 0; i--) {
-              const block = allBlocks[i];
-              if (block.type === "heading") {
-                currentHeading = extractTextFromBlock(block);
-                headingLevel = (block.props as { level?: number })?.level || 1;
-                break;
-              }
-            }
-          }
-
-          if (currentHeading) {
-            systemPrompt = `Buat konten detail untuk heading berikut secara otomatis:
-
-STRUKTUR DOKUMEN SAAT INI:
-${contextContent}
-
-HEADING YANG SEDANG AKTIF: ${currentHeading} (Level ${headingLevel})
-
-TUGAS OTOMATIS:
-- Analisis heading "${currentHeading}" dan buat konten yang relevan
-- Tulis konten detail dan informatif yang sesuai dengan level heading
-- Sesuaikan kedalaman konten dengan hierarki heading
-- Berikan informasi yang valuable dan comprehensive
-
-INSTRUKSI:
-- Tulis 2-4 paragraf konten yang mendalam
-- JANGAN tulis ulang heading atau struktur
-- HANYA tulis konten paragraf yang akan ditempatkan di bawah heading aktif
-- Pastikan konten informatif, accurate, dan well-structured
-- Gunakan bahasa Indonesia yang natural dan professional
-
-Buat konten otomatis untuk heading "${currentHeading}".`;
-          } else {
-            systemPrompt = `Buat konten paragraf yang relevan berdasarkan konteks editor saat ini:
-
-KONTEKS DOKUMEN:
-${contextContent || "(Editor masih kosong)"}
-
-TUGAS OTOMATIS:
-- Analisis konteks yang ada dan buat konten yang melengkapi
-- Jika editor kosong, buat konten paragraf pembuka yang umum dan menarik
-- Tulis konten yang informatif dan valuable
-
-INSTRUKSI:
-- Tulis 2-3 paragraf konten yang substantial
-- Gunakan bahasa Indonesia yang natural
-- Berikan informasi yang berguna dan relevan
-- HANYA tulis konten paragraf, tidak ada heading
-
-Buat konten otomatis yang sesuai dengan konteks.`;
-          }
-          break;
-
-        case "sentence":
-          // Auto sentence continuation
-          const sentenceContext = analyzeCurrentCursorContext();
-          
-          if (sentenceContext) {
-            const { contextType, currentText, precedingContext, targetHeading } = sentenceContext;
-            
-            systemPrompt = `Lanjutkan tulisan secara otomatis dari konteks berikut:
-
-KONTEKS SEBELUMNYA:
-${precedingContext}
-
-TEKS SAAT INI: ${currentText}
-
-INFORMASI KONTEKS:
-- Tipe konteks: ${contextType}
-- Heading terkait: ${targetHeading?.text || "Tidak ada"}
-
-TUGAS OTOMATIS MELANJUTKAN:
-- Analisis alur pemikiran dari kalimat/paragraf terakhir
-- Lanjutkan dengan natural dan logis tanpa mengulang informasi
-- Pertahankan kohesi dan koherensi dengan tulisan sebelumnya
-- Kembangkan ide yang sudah dimulai dengan informasi baru
-- Berikan penjelasan yang mendalam dan substantial
-
-INSTRUKSI:
-- Tulis 2-4 paragraf tambahan yang bermakna
-- Jaga konsistensi tone dan style dengan tulisan sebelumnya
-- Berikan value yang jelas dan informasi yang berguna
-- Pastikan transisi yang smooth dari kalimat terakhir
-- Gunakan bahasa Indonesia yang natural dan flowing
-
-Lanjutkan tulisan secara otomatis dengan mengikuti alur yang sudah ada.`;
-          } else {
-            systemPrompt = `Lanjutkan tulisan dari konteks editor berikut:
-
-KONTEKS:
-${contextContent || "(Tidak ada konteks khusus)"}
-
-TUGAS: Lanjutkan dengan konten yang relevan dan natural.
-
-INSTRUKSI:
-- Tulis 2-3 paragraf yang melengkapi konteks
-- Gunakan bahasa Indonesia yang natural
-- Berikan informasi yang valuable`;
-          }
-          break;
-
-        default:
-          systemPrompt = `Buat konten yang relevan berdasarkan konteks editor saat ini:
-
-KONTEKS:
-${contextContent}
-
-INSTRUKSI:
-- Analisis konteks dan buat konten yang sesuai
-- Gunakan bahasa Indonesia yang natural
-- Berikan informasi yang valuable dan informatif`;
-      }
-
-      const { text } = await generateText({
-        model: aiModel,
-        prompt: systemPrompt,
-        maxTokens: type === "structure" ? 1000 : type === "content" ? 2000 : 1500,
-        temperature: 0.7,
-        presencePenalty: 0.1,
-        frequencyPenalty: 0.1,
-      });
-      
-      if (text && text.trim()) {
-        setGeneratedContent(text);
-        openAIModal(); // Show modal with generated content
-      } else {
-        alert("⚠️ AI tidak menghasilkan konten. Silakan coba lagi.");
-      }
-      
-    } catch (error) {
-      console.error("AI auto generation failed:", error);
-      alert("❌ Gagal menghasilkan konten AI otomatis. Silakan coba lagi.");
-    } finally {
-      setIsAILoading(false);
+    if (generatedText) {
+      setGeneratedContent(generatedText);
+      openAIModal(); // Show modal with generated content
     }
   };
 
-  // Handle AI generation (existing function)
+  // Handle AI generation (existing function with progress enhancement)
   const handleAIGeneration = async (inputPrompt: string, type: string = "structure", behavior: string = "rewrite") => {
     if (!inputPrompt.trim()) {
       alert("⚠️ Silakan masukkan topik atau kata kunci sebelum generate konten!");
@@ -1084,7 +1241,12 @@ INSTRUKSI:
       }
     }
     
-    await generateAIContent(inputPrompt, type);
+    // Use enhanced progress generation
+    const generatedText = await handleAIGenerationWithProgress(inputPrompt, type, behavior);
+    
+    if (generatedText) {
+      setGeneratedContent(generatedText);
+    }
   };
 
   // Analyze cursor context - Enhanced version
@@ -1252,7 +1414,7 @@ INSTRUKSI:
     }
   };
 
-  // NEW: Handle inline AI actions with streaming animation
+  // Handle inline AI actions with streaming animation
   const handleInlineAIAction = async (action: string) => {
     const cursorPosition = editor.getTextCursorPosition();
     const currentBlock = cursorPosition?.block;
@@ -1292,7 +1454,10 @@ INSTRUKSI:
       currentBlock: targetBlock, // This will be updated in typeText if it's a heading
       originalText: originalText,
       showControls: false,
-      position: { x: 0, y: 0 }
+      position: { x: 0, y: 0 },
+      progress: 0,
+      totalChunks: 0,
+      currentChunk: 0,
     });
 
     try {
@@ -1444,7 +1609,10 @@ INSTRUKSI:
             currentBlock: null,
             originalText: "",
             showControls: false,
-            position: { x: 0, y: 0 }
+            position: { x: 0, y: 0 },
+            progress: 0,
+            totalChunks: 0,
+            currentChunk: 0,
           });
           return;
 
@@ -1455,7 +1623,10 @@ INSTRUKSI:
             currentBlock: null,
             originalText: "",
             showControls: false,
-            position: { x: 0, y: 0 }
+            position: { x: 0, y: 0 },
+            progress: 0,
+            totalChunks: 0,
+            currentChunk: 0,
           });
           return;
       }
@@ -1481,7 +1652,10 @@ INSTRUKSI:
           currentBlock: null,
           originalText: "",
           showControls: false,
-          position: { x: 0, y: 0 }
+          position: { x: 0, y: 0 },
+          progress: 0,
+          totalChunks: 0,
+          currentChunk: 0,
         });
       }
 
@@ -1494,7 +1668,10 @@ INSTRUKSI:
         currentBlock: null,
         originalText: "",
         showControls: false,
-        position: { x: 0, y: 0 }
+        position: { x: 0, y: 0 },
+        progress: 0,
+        totalChunks: 0,
+        currentChunk: 0,
       });
     }
   };
@@ -1672,7 +1849,6 @@ INSTRUKSI:
       return null;
     }
     
-    setIsAILoading(true);
     try {
       let systemPrompt = "";
       
@@ -1750,7 +1926,7 @@ Buat HANYA outline heading untuk "${prompt}" tanpa konten paragraf.`;
               const currentIndex = allBlocks.findIndex(block => block.id === cursorPosition.block.id);
               
               // Find the governing heading by looking backwards
-              for (let i = currentIndex; i >= 0; i--) {
+                            for (let i = currentIndex; i >= 0; i--) {
                 const block = allBlocks[i];
                 if (block.type === "heading") {
                   currentHeading = extractTextFromBlock(block);
@@ -1854,14 +2030,10 @@ INSTRUKSI:
         frequencyPenalty: 0.1,
       });
       
-      setGeneratedContent(text);
       return text;
     } catch (error) {
       console.error("AI generation failed:", error);
-      alert("❌ Gagal menghasilkan konten AI. Silakan coba lagi.");
       return null;
-    } finally {
-      setIsAILoading(false);
     }
   };
 
@@ -1945,7 +2117,7 @@ INSTRUKSI:
     }
   };
 
-      // FIXED: Insert content to editor with proper sentence continuation
+  // FIXED: Insert content to editor with proper sentence continuation
   const insertContentToEditor = async (behavior: string = "rewrite") => {
     if (!generatedContent || !generatedContent.trim()) {
       console.warn("No generated content to insert");
@@ -2398,6 +2570,169 @@ INSTRUKSI:
   return (
     <>
       <div style={{ position: 'relative', height: '100%', ...style }}>
+        {/* Enhanced Modern Undo/Redo Controls */}
+        <Paper 
+          p="sm" 
+          mb="md" 
+          withBorder={false}
+          style={{
+            background: computedColorScheme === "dark" 
+              ? 'linear-gradient(135deg, rgba(26, 27, 30, 0.8), rgba(30, 32, 36, 0.8))'
+              : 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9))',
+            backdropFilter: 'blur(20px)',
+            border: `1px solid ${computedColorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+            borderRadius: '16px',
+            boxShadow: computedColorScheme === "dark"
+              ? '0 8px 32px rgba(0, 0, 0, 0.3)'
+              : '0 8px 32px rgba(0, 0, 0, 0.1)',
+          }}
+        >
+          <Group gap="sm" justify="space-between">
+            <Group gap="xs">
+              <Tooltip 
+                label={`Undo (Ctrl+Z)${canUndo() ? ` - ${undoRedoState.history.length - undoRedoState.currentIndex - 1} langkah tersedia` : ''}`}
+                position="bottom"
+                withArrow
+              >
+                <ActionIcon
+                  variant={canUndo() ? "gradient" : "subtle"}
+                  gradient={canUndo() ? { from: 'blue', to: 'cyan' } : undefined}
+                  color={canUndo() ? undefined : "gray"}
+                  onClick={undo}
+                  disabled={!canUndo()}
+                  size="md"
+                  radius="xl"
+                  style={{
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    transform: canUndo() ? 'scale(1)' : 'scale(0.9)',
+                    opacity: canUndo() ? 1 : 0.5,
+                    boxShadow: canUndo() ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                  }}
+                >
+                  <IconArrowBackUp size={18} />
+                </ActionIcon>
+              </Tooltip>
+              
+              <Tooltip 
+                label={`Redo (Ctrl+Y)${canRedo() ? ` - ${undoRedoState.history.length - undoRedoState.currentIndex - 1} langkah tersedia` : ''}`}
+                position="bottom"
+                withArrow
+              >
+                <ActionIcon
+                  variant={canRedo() ? "gradient" : "subtle"}
+                  gradient={canRedo() ? { from: 'blue', to: 'cyan' } : undefined}
+                  color={canRedo() ? undefined : "gray"}
+                  onClick={redo}
+                  disabled={!canRedo()}
+                  size="md"
+                  radius="xl"
+                  style={{
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    transform: canRedo() ? 'scale(1)' : 'scale(0.9)',
+                    opacity: canRedo() ? 1 : 0.5,
+                    boxShadow: canRedo() ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                  }}
+                >
+                  <IconArrowForwardUp size={18} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
+            
+            <Group gap="sm">
+              {/* History indicator with progress */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px',
+                padding: '4px 12px',
+                borderRadius: '20px',
+                background: computedColorScheme === "dark" 
+                  ? 'rgba(59, 130, 246, 0.1)' 
+                  : 'rgba(59, 130, 246, 0.05)',
+                border: `1px solid ${computedColorScheme === "dark" ? "rgba(59, 130, 246, 0.2)" : "rgba(59, 130, 246, 0.1)"}`,
+              }}>
+                <Text size="xs" fw={600} c="blue">
+                  {undoRedoState.currentIndex + 1}/{undoRedoState.history.length}
+                </Text>
+                <div style={{
+                  width: '40px',
+                  height: '4px',
+                  borderRadius: '2px',
+                  background: computedColorScheme === "dark" ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${((undoRedoState.currentIndex + 1) / undoRedoState.history.length) * 100}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #3b82f6, #06b6d4)',
+                    borderRadius: '2px',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+              </div>
+              
+              {/* Quick save indicator */}
+              {lastSavedContent.current && (
+                <Tooltip label="Auto-saved" position="bottom">
+                  <ThemeIcon
+                    size="sm"
+                    variant="light"
+                    color="green"
+                    radius="xl"
+                    style={{
+                      animation: 'fade-in 0.3s ease-out'
+                    }}
+                  >
+                    <IconCheck size={12} />
+                  </ThemeIcon>
+                </Tooltip>
+              )}
+            </Group>
+          </Group>
+        </Paper>
+
+        {/* AI Streaming Progress Overlay */}
+        {aiStreamingState.isStreaming && (
+          <Box
+            pos="fixed"
+            top={20}
+            right={20}
+            style={{ zIndex: 1000 }}
+            className="ai-progress-container"
+          >
+            <Paper p="md" shadow="lg" radius="md" bg="blue.0">
+              <Group gap="md">
+                <RingProgress
+                  size={60}
+                  thickness={6}
+                  sections={[{ value: aiStreamingState.progress, color: 'blue' }]}
+                  label={
+                    <Center>
+                      <Text size="xs" fw={700} c="blue">
+                        {aiStreamingState.progress}%
+                      </Text>
+                    </Center>
+                  }
+                />
+                <Stack gap="xs">
+                  <Text size="sm" fw={600} c="blue">
+                    AI sedang mengetik...
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {aiStreamingState.currentChunk}/{aiStreamingState.totalChunks} kata
+                  </Text>
+                  <Progress
+                    value={aiStreamingState.progress}
+                    size="xs"
+                    radius="xl"
+                    color="blue"
+                  />
+                </Stack>
+              </Group>
+            </Paper>
+          </Box>
+        )}
+
         <div style={{ height: '100%', overflow: 'auto' }}>
           <BlockNoteView
             editor={editor}
@@ -2636,7 +2971,7 @@ INSTRUKSI:
         )}
 
         {/* MODERN & ELEGANT: AI Processing Indicator */}
-        {(isAILoading && !aiModalOpened) && (
+        {(aiProgressState.isLoading && !aiModalOpened) && (
           <>
             {/* Glassmorphism overlay with modern design */}
             <div
@@ -2681,26 +3016,27 @@ INSTRUKSI:
                   marginBottom: '24px',
                   position: 'relative'
                 }}>
-                  <div style={{
-                    width: '80px',
-                    height: '80px',
-                    background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto',
-                    animation: 'sparkle-pulse 2s ease-in-out infinite',
-                    boxShadow: '0 8px 32px rgba(59, 130, 246, 0.3)'
-                  }}>
-                    <IconSparkles 
-                      size={32} 
-                      color="white"
-                      style={{
-                        animation: 'sparkle-rotate 3s linear infinite'
-                      }}
-                    />
-                  </div>
+                  <RingProgress
+                    size={120}
+                    thickness={8}
+                    sections={[{ value: aiProgressState.progress, color: 'blue' }]}
+                    label={
+                      <Center>
+                        <Stack gap="xs" align="center">
+                          <IconSparkles 
+                            size={28} 
+                            color="#3b82f6"
+                            style={{
+                              animation: 'sparkle-rotate 3s linear infinite'
+                            }}
+                          />
+                          <Text size="lg" fw={700} c="blue">
+                            {aiProgressState.progress}%
+                          </Text>
+                        </Stack>
+                      </Center>
+                    }
+                  />
                 </div>
                 
                 {/* Modern typography */}
@@ -2715,7 +3051,7 @@ INSTRUKSI:
                     fontSize: '24px'
                   }}
                 >
-                  AI sedang memproses
+                  {aiProgressState.stage}
                 </Text>
                 <Text 
                   size="md" 
@@ -2723,40 +3059,25 @@ INSTRUKSI:
                   style={{ 
                     fontSize: '16px',
                     lineHeight: 1.5,
-                    opacity: 0.8
+                    opacity: 0.8,
+                    marginBottom: '16px'
                   }}
                 >
-                  Menganalisis konten dan menghasilkan teks berkualitas
+                  Menghasilkan konten berkualitas dengan AI
                 </Text>
-              </div>
-            </div>
-            
-            {/* Subtle top notification bar */}
-            <div
-              style={{
-                position: 'fixed',
-                top: '100px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                zIndex: 999998,
-                pointerEvents: 'none'
-              }}
-            >
-              <div
-                style={{
-                  background: 'linear-gradient(90deg, #3b82f6, #6366f1)',
-                  color: 'white',
-                  padding: '12px 24px',
-                  borderRadius: '50px',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  boxShadow: '0 8px 25px rgba(59, 130, 246, 0.3)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  animation: 'slide-up 0.4s ease-out'
-                }}
-              >
-                🚀 Processing...
+                
+                {/* Enhanced progress bar */}
+                <Progress
+                  value={aiProgressState.progress}
+                  size="lg"
+                  radius="xl"
+                  color="blue"
+                  style={{ width: "100%" }}
+                />
+                
+                <Text size="sm" c="dimmed" mt="sm">
+                  Estimasi: {Math.round((100 - aiProgressState.progress) * 0.08)}s tersisa
+                </Text>
               </div>
             </div>
           </>
@@ -2826,38 +3147,9 @@ INSTRUKSI:
                     AI sedang menulis
                   </Text>
                   <Text size="sm" c="dimmed" style={{ opacity: 0.7 }}>
-                    Mengetik dengan animasi
+                    {aiStreamingState.currentChunk}/{aiStreamingState.totalChunks} kata ({aiStreamingState.progress}%)
                   </Text>
                 </div>
-              </div>
-            </div>
-            
-            {/* Floating typing indicator */}
-            <div
-              style={{
-                position: 'fixed',
-                top: '120px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                zIndex: 999996,
-                pointerEvents: 'none'
-              }}
-            >
-              <div
-                style={{
-                  background: 'linear-gradient(90deg, #10b981, #059669)',
-                  color: 'white',
-                  padding: '8px 16px',
-                  borderRadius: '20px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  animation: 'sparkle-float 3s ease-in-out infinite'
-                }}
-              >
-                ⌨️ Menulis...
               </div>
             </div>
           </>
@@ -2959,7 +3251,7 @@ INSTRUKSI:
         )}
 
         {/* Minimal status indicator */}
-        {(aiStreamingState.isStreaming || isAILoading || isAutoContinuing) && (
+        {(aiStreamingState.isStreaming || aiProgressState.isLoading || isAutoContinuing) && (
           <div
             style={{
               position: 'fixed',
@@ -2984,7 +3276,7 @@ INSTRUKSI:
         )}
       </div>
 
-      {/* AI Modal */}
+      {/* Enhanced AI Modal */}
       <Modal
         opened={aiModalOpened}
         onClose={closeModalAndReset}
@@ -3122,20 +3414,38 @@ INSTRUKSI:
                 </SimpleGrid>
               </Stack>
 
-              {/* Loading State */}
-              {isAILoading && (
-                <Paper p="lg" radius="md" bg={aiMode === "auto" ? "blue.0" : "blue.0"}>
-                  <Group gap="md" justify="center">
-                    <Loader size="md" color={aiMode === "auto" ? "blue" : "blue"} />
+              {/* Enhanced Loading State with Progress */}
+              {aiProgressState.isLoading && (
+                <Paper p="xl" radius="md" bg="blue.0">
+                  <Stack gap="md" align="center">
+                    <RingProgress
+                      size={80}
+                      thickness={8}
+                      sections={[{ value: aiProgressState.progress, color: 'blue' }]}
+                      label={
+                        <Center>
+                          <Text size="lg" fw={700} c="blue">
+                            {aiProgressState.progress}%
+                          </Text>
+                        </Center>
+                      }
+                    />
                     <Stack gap="xs" align="center">
-                      <Text size="md" c={aiMode === "auto" ? "blue" : "blue"} fw={500}>
-                        AI sedang membuat konten{aiMode === "auto" ? " otomatis" : ""}...
+                      <Text size="lg" c="blue" fw={600}>
+                        {aiProgressState.stage}
                       </Text>
-                      <Text size="sm" c={aiMode === "auto" ? "blue" : "blue"}>
-                        Mohon tunggu sebentar
+                      <Progress
+                        value={aiProgressState.progress}
+                        size="md"
+                        radius="xl"
+                        color="blue"
+                        style={{ width: "100%" }}
+                      />
+                      <Text size="sm" c="blue">
+                        Estimasi: {Math.round((100 - aiProgressState.progress) * 0.1)}s tersisa
                       </Text>
                     </Stack>
-                  </Group>
+                  </Stack>
                 </Paper>
               )}
             </>
@@ -3144,7 +3454,7 @@ INSTRUKSI:
             <Stack gap="md">
               <Group justify="space-between" align="center">
                 <div>
-                  <Text fw={600} size="lg" c={aiMode === "auto" ? "blue" : "blue"} component="span">
+                  <Text fw={600} size="lg" c="blue" component="span">
                     <IconSparkles size={20} /> Konten Yang Dihasilkan
                   </Text>
                   {aiMode === "continue" && (
@@ -3158,7 +3468,7 @@ INSTRUKSI:
                     </Badge>
                   )}
                   {currentAIType && (
-                    <Badge size="sm" color={aiMode === "auto" ? "blue" : "blue"} variant="light" ml="sm">
+                    <Badge size="sm" color="blue" variant="light" ml="sm">
                       {currentAIType === "structure" ? "Struktur" : 
                        currentAIType === "content" ? "Konten" : "Kalimat"}
                     </Badge>
@@ -3207,7 +3517,7 @@ INSTRUKSI:
                 <Button
                   size="lg"
                   variant="gradient"
-                  gradient={aiMode === "auto" ? { from: 'blue', to: 'cyan' } : { from: 'blue', to: 'cyan' }}
+                  gradient={{ from: 'blue', to: 'cyan' }}
                   leftSection={<IconPencil size={20} />}
                   onClick={() => {
                     const behaviorMap: { [key: string]: string } = {
@@ -3251,7 +3561,7 @@ INSTRUKSI:
                 </Button>
               </Group>
 
-              {/* Behavior Info - FIXED text for sentence continuation */}
+              {/* Behavior Info */}
               <Paper p="md" radius="md" bg={computedColorScheme === "dark" ? "dark.7" : "gray.0"}>
                 <Text size="sm" c="dimmed" ta="center">
                   {currentAIType === "structure" && "⚠️ Mode Struktur akan mengganti semua konten yang ada dengan struktur baru"}
