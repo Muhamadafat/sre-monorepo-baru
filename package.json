@@ -13,7 +13,6 @@
     "db:pull": "npm -w @sre-monorepo/lib run prisma:db:pull",
     "db:studio": "npm -w @sre-monorepo/lib run prisma:studio",
     "db:reset": "npm -w @sre-monorepo/lib run prisma:reset",
-
     "build:main": "turbo run build --filter=main",
     "build:brain": "turbo run build --filter=brain",
     "start": "turbo run start",
@@ -32,5 +31,11 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "@mantine/notifications": "^8.2.7",
+    "@types/react-katex": "^3.0.4",
+    "katex": "^0.16.22",
+    "react-katex": "^3.1.0"
+  }
 }
