@@ -1521,10 +1521,10 @@ const handleSubmitToTeacher = async () => {
           let blockModified = false;
           const newInlineContent: any[] = [];
 
-          block.content.forEach((inlineContent) => {
+          block.content.forEach((inlineContent: { type: string, text?: string }) => {
             if (
               inlineContent.type === "text" &&
-              inlineContent.text.includes(citationText)
+              inlineContent.text?.includes(citationText)
             ) {
               blockModified = true;
               const newText = inlineContent.text.replaceAll(citationText, "");
