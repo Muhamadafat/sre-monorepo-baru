@@ -11,7 +11,11 @@ import AnnotationPanel from '@/components/AnnotationPanel';
 const BlockNoteEditorComponent = dynamic(() => import("@/components/BlockNoteEditor"), {
   ssr: false
 });
+const ActivityLog = dynamic(() => import("@/components/ActivityLog"), {
+  ssr: false
+});
 import NextImage from 'next/image';
+import { useActivityLog } from '@/hooks/useActivityLog';
 import {
   AppShell,
   Burger,
@@ -56,7 +60,8 @@ import {
    IconBrain,
    IconMap2,
    IconSend,
-   IconFilePlus, 
+   IconFilePlus,
+   IconHistory, 
    IconUpload,
    IconFileText,
    IconChevronRight,
@@ -69,7 +74,6 @@ import {
    IconUser,
    IconLogout,
    IconList,
-   IconHistory,
    IconTrash,
    IconNumber,
    IconDotsVertical,
@@ -83,6 +87,7 @@ import {
    IconBulb,
    IconShieldCheck,
    IconScan,
+   IconRobot as IconActivity,
    IconQuote,
    IconBook,
    IconWorld,
@@ -255,6 +260,11 @@ export default function Home() {
   const [writerSessionLoading, setWriterSessionLoading] = useState(true);
   const [writerSession, setWriterSession] = useState<any>(null);
   const [writerSessionInitialized, setWriterSessionInitialized] = useState(false);
+
+  // State untuk draft
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftContent, setDraftContent] = useState('');
+  const [isDraftSaving, setIsDraftSaving] = useState(false);
   
   // const [assignmentCode, setAssignmentCode] = useState('');
   const [isValidatingCode, setIsValidatingCode] = useState(false);
@@ -462,7 +472,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("chat");
   const isMobile = useMediaQuery('(max-width: 768px)');
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
-  const [fileName, setFileName] = useState("Judul Artikel 1");
+  const [fileName, setFileName] = useState("");
+  const [isClient, setIsClient] = useState(false);
   const [headings, setHeadings] = useState<HeadingItem[]>([]);
   const [draftCounter, setDraftCounter] = useState(1); // Counter untuk versi draft
   // State untuk daftar artikel dari API
@@ -518,10 +529,40 @@ export default function Home() {
     bibliographyModalOpened, // Modal form bibliography
     { open: openBibliographyModal, close: closeBibliographyModal },
   ] = useDisclosure(false);
+  const [
+    activityLogOpened, // Modal activity log
+    { open: openActivityLog, close: closeActivityLog },
+  ] = useDisclosure(false);
+
+  // Activity log hook
+  const {
+    activities,
+    clearAll: clearActivityLog,
+    exportLog,
+    logFormula,
+    logEdit,
+    logSave,
+    logTransform,
+    logError,
+  } = useActivityLog();
 
   useEffect(() => {
     bibliographyListRef.current = bibliographyList;
   }, [bibliographyList]);
+
+  // Initialize client-side state to prevent hydration errors
+  useEffect(() => {
+    // Add delay to ensure DOM is fully ready
+    const timer = setTimeout(() => {
+      setIsClient(true);
+      setFileName("Judul Artikel 1");
+      
+      // Add welcome log
+      logTransform('Editor Dimulai', 'Editor BlockNote telah siap digunakan');
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [logTransform]);
 
   // 4. Load drafts di useEffect (tambahan untuk page.tsx)
   const loadDrafts = async () => {
@@ -1619,6 +1660,149 @@ const handleSubmitToTeacher = async () => {
 
   /**
    * =================================================================================
+   * FUNGSI UNTUK MENGELOLA DRAFT
+   * =================================================================================
+   */
+  const handleDraftTitleChange = (value: string) => {
+    setDraftTitle(value);
+  };
+
+  const handleDraftContentChange = (value: string) => {
+    setDraftContent(value);
+  };
+
+  const saveDraft = async () => {
+    if (!draftTitle.trim()) {
+      notifications.show({
+        title: "Judul Diperlukan",
+        message: "Mohon masukkan judul untuk draft artikel",
+        color: "yellow",
+      });
+      return;
+    }
+
+    setIsDraftSaving(true);
+    try {
+      // Simulate API call to save draft
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      notifications.show({
+        title: "Draft Tersimpan",
+        message: `Draft "${draftTitle}" berhasil disimpan`,
+        color: "green",
+      });
+      
+      // Log to activity
+      logSave(`Draft artikel "${draftTitle}" telah disimpan`);
+      
+    } catch (error) {
+      notifications.show({
+        title: "Gagal Menyimpan",
+        message: "Terjadi kesalahan saat menyimpan draft",
+        color: "red",
+      });
+    } finally {
+      setIsDraftSaving(false);
+    }
+  };
+
+  const startWriting = () => {
+    console.log('🚀 Starting to write...');
+    
+    // Set default title if empty
+    if (!draftTitle.trim()) {
+      setDraftTitle('Draft Artikel Baru');
+    }
+    
+    // Focus the editor
+    const editor = editorRef.current?.getEditor();
+    if (editor) {
+      editor.focus();
+      console.log('✅ Editor focused');
+    }
+    
+    // Log activity
+    logEdit('Mulai Menulis', 'Memulai penulisan draft artikel baru');
+    
+    // Show notification
+    notifications.show({
+      title: "Siap Menulis!",
+      message: "Editor telah siap. Mulai tulis artikel Anda!",
+      color: "blue",
+    });
+  };
+
+  const addParagraph = () => {
+    console.log('🔧 Adding paragraph...');
+    const editor = editorRef.current?.getEditor();
+    if (editor) {
+      // Add a new paragraph block
+      editor.insertBlocks([{
+        type: "paragraph",
+        content: "Paragraf baru dimulai di sini..."
+      }], editor.getTextCursorPosition().block);
+      logEdit('Paragraf Ditambah', 'Menambahkan paragraf baru ke dalam draft');
+      console.log('✅ Paragraph added successfully');
+    } else {
+      console.error('❌ Editor not found');
+      notifications.show({
+        title: "Error",
+        message: "Editor tidak ditemukan",
+        color: "red",
+      });
+    }
+  };
+
+  const insertQuote = () => {
+    console.log('🔧 Inserting quote...');
+    const editor = editorRef.current?.getEditor();
+    if (editor) {
+      // Add a quote block
+      editor.insertBlocks([{
+        type: "paragraph",
+        content: [
+          { type: "text", text: "\"Ini adalah contoh kutipan dari referensi.\"", styles: { italic: true } },
+          { type: "text", text: "\n— Sumber Referensi", styles: { bold: true } }
+        ]
+      }], editor.getTextCursorPosition().block);
+      logEdit('Kutipan Disisipkan', 'Menambahkan kutipan ke dalam draft');
+      console.log('✅ Quote inserted successfully');
+    } else {
+      console.error('❌ Editor not found');
+      notifications.show({
+        title: "Error", 
+        message: "Editor tidak ditemukan",
+        color: "red",
+      });
+    }
+  };
+
+  const addBulletList = () => {
+    console.log('🔧 Adding bullet list...');
+    const editor = editorRef.current?.getEditor();
+    if (editor) {
+      // Add bullet list blocks
+      const bulletPoints = [
+        { type: "bulletListItem", content: "Poin pertama" },
+        { type: "bulletListItem", content: "Poin kedua" },
+        { type: "bulletListItem", content: "Poin ketiga" }
+      ];
+      
+      editor.insertBlocks(bulletPoints, editor.getTextCursorPosition().block);
+      logEdit('Daftar Poin Ditambah', 'Menambahkan daftar poin ke dalam draft');
+      console.log('✅ Bullet list added successfully');
+    } else {
+      console.error('❌ Editor not found');
+      notifications.show({
+        title: "Error",
+        message: "Editor tidak ditemukan", 
+        color: "red",
+      });
+    }
+  };
+
+  /**
+   * =================================================================================
    * FUNGSI UNTUK MENAMBAHKAN ARTIKEL KE DAFTAR PUSTAKA (FUNGSI 'CITE')
    * =================================================================================
    * Fungsi ini dipanggil ketika tombol "Cite" pada sebuah artikel di "Reference Manager"
@@ -1822,8 +2006,18 @@ const handleSubmitToTeacher = async () => {
   //   });
   // };
   const handleSaveDraft = async () => {
-    const editorInstance = editorRef.current?.getEditor?.();
-    const contentBlocks = editorInstance?.document;
+    console.log('🚀 Starting handleSaveDraft...');
+    
+    // Try multiple methods to get editor content
+    let contentBlocks = editorRef.current?.getContent?.();
+    
+    // Fallback method using getEditor if getContent doesn't work
+    if (!contentBlocks || contentBlocks.length === 0) {
+      const editorInstance = editorRef.current?.getEditor?.();
+      contentBlocks = editorInstance?.document;
+    }
+    
+    console.log('📝 Content blocks:', contentBlocks);
 
     if (!contentBlocks || contentBlocks.length === 0) {
       notifications.show({
@@ -1837,10 +2031,13 @@ const handleSubmitToTeacher = async () => {
     // Extract text menggunakan function yang sudah ada
     const contentText = extractTextFromBlockNote(contentBlocks);
     const wordCount = contentText.split(/\s+/).filter(Boolean).length;
+    
+    console.log('📊 Word count:', wordCount);
+    console.log('📄 Content text preview:', contentText.substring(0, 100));
 
     if (wordCount === 0) {
       notifications.show({
-        title: "Konten Kosong",
+        title: "Konten Kosong", 
         message: "Silakan tulis konten terlebih dahulu!",
         color: "red",
       });
@@ -1860,9 +2057,12 @@ const handleSubmitToTeacher = async () => {
         title = headingText;
       }
     }
+    
+    console.log('📰 Title:', title);
 
     // Validasi writerSession
     if (!writerSession?.id) {
+      console.error('❌ Writer session not found:', writerSession);
       notifications.show({
         title: "Error",
         message: "Writer session tidak ditemukan!",
@@ -1871,8 +2071,12 @@ const handleSubmitToTeacher = async () => {
       return;
     }
 
+    console.log('✅ Writer session found:', writerSession.id);
+
   try {
-    setLoading(true); // Assuming you have loading state
+    setLoading(true);
+    
+    console.log('🔄 Sending data to API...');
     
     // Save to database
     const response = await fetch("/api/draft/save", {
@@ -1889,6 +2093,8 @@ const handleSubmitToTeacher = async () => {
     });
 
     const result = await response.json();
+    
+    console.log('📥 API Response:', result);
 
     if (!response.ok) {
       throw new Error(result.message || "Failed to save draft");
@@ -1913,13 +2119,20 @@ const handleSubmitToTeacher = async () => {
       color: "green",
     });
 
-    console.log('✅ Draft saved:', result.draft);
+    // Log activity
+    logSave(`Draft "${title}" disimpan`, wordCount);
+
+    console.log('✅ Draft saved successfully:', result.draft);
 
   } catch (error) {
     console.error('❌ Error saving draft:', error);
+    
+    // Log error
+    logError('Gagal menyimpan draft', error instanceof Error ? error.message : 'Unknown error');
+    
     notifications.show({
       title: "Error",
-      message: "Gagal menyimpan draft. Silakan coba lagi.",
+      message: `Gagal menyimpan draft: ${error instanceof Error ? error.message : 'Unknown error'}`,
       color: "red",
     });
   } finally {
@@ -1972,6 +2185,19 @@ const handleSubmitToTeacher = async () => {
 
     // ✅ MODIFICATION: Trigger bibliography sync when content changes
     syncBibliographyWithContent();
+
+    // Log content changes (debounced to avoid spam)
+    const contentText = extractTextFromBlockNote(content);
+    const wordCount = contentText.split(/\s+/).filter(Boolean).length;
+    
+    if (wordCount > 0) {
+      // Simple debounce - only log if significant change
+      const debouncedLog = setTimeout(() => {
+        logEdit('Konten diubah', undefined, undefined, wordCount);
+      }, 2000);
+      
+      return () => clearTimeout(debouncedLog);
+    }
 
     // Extract headings from BlockNote content dengan level
     const extractedHeadings: { id: string; text: string; level: number }[] = [];
@@ -2042,6 +2268,23 @@ const handleSubmitToTeacher = async () => {
 
   const [selectedNode, setSelectedNode] = useState<ExtendedNode | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<ExtendedEdge | null>(null);
+
+  // Show loading screen until client is ready to prevent hydration errors
+  if (!isClient) {
+    return (
+      <div
+        style={{
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#f8f9fa"
+        }}
+      >
+        <Text size="lg" c="dimmed">Loading...</Text>
+      </div>
+    );
+  }
 
   return (
     <AppShell
@@ -2116,7 +2359,7 @@ const handleSubmitToTeacher = async () => {
               )}
             </div>
 
-            <Group gap="sm" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+            <Group gap="sm" style={{ flexShrink: 0, whiteSpace: 'nowrap' }} suppressHydrationWarning>
               <Tooltip label={dark ? 'Light mode' : 'Dark mode'}>
                 <ActionIcon
                   variant="light"
@@ -2124,20 +2367,21 @@ const handleSubmitToTeacher = async () => {
                   onClick={toggleColorScheme}
                   size="lg"
                   radius="md"
+                  suppressHydrationWarning
                 >
                   {dark ? <IconSun size={18} /> : <IconMoon size={18} />}
                 </ActionIcon>
               </Tooltip>
             
               <Tooltip label="Settings">
-                <ActionIcon variant="light" color="gray" size="lg">
+                <ActionIcon variant="light" color="gray" size="lg" suppressHydrationWarning>
                   <IconSettings size={18} />
                 </ActionIcon>
               </Tooltip>
                       
               <Menu shadow="lg" width={220} position="bottom-end" offset={10}>
                 <Menu.Target>
-                  <ActionIcon variant="light" size="lg" radius="xl">
+                  <ActionIcon variant="light" size="lg" radius="xl" suppressHydrationWarning>
                     <Avatar
                       size="sm"
                       radius="xl"
@@ -2228,11 +2472,12 @@ const handleSubmitToTeacher = async () => {
 
                 {/* Title Input dengan styling yang diperbaiki */}
                 <TextInput
-                  value={fileName}
+                  value={isClient ? fileName : ""}
                   onChange={(e) => setFileName(e.currentTarget.value)}
                   variant="filled"
                   size="md"
                   placeholder="Judul artikel..."
+                  suppressHydrationWarning={true}
                   styles={{
                     input: {
                       fontWeight: 600,
@@ -2440,9 +2685,10 @@ const handleSubmitToTeacher = async () => {
               </Text>
 
               <TextInput
-                value={fileName}
+                value={isClient ? fileName : ""}
                 onChange={(e) => setFileName(e.currentTarget.value)}
                 variant="unstyled"
+                suppressHydrationWarning={true}
                 styles={{
                   input: {
                     fontWeight: 600,
@@ -2711,9 +2957,10 @@ const handleSubmitToTeacher = async () => {
                           style={{
                             transition: 'all 0.2s ease',
                           }}
-                          disabled={isScanning}
+                          disabled={isScanning || loading}
+                          loading={loading}
                         >
-                          Simpan Draft
+                          {loading ? 'Menyimpan...' : 'Simpan Draft'}
                         </Button>
 
                         <Button 
@@ -2776,12 +3023,10 @@ const handleSubmitToTeacher = async () => {
                           alignItems: 'center',
                           gap: '16px',
                           marginBottom: '20px',
-                          padding: '10px 16px',
-                          borderRadius: '16px',
-                          // border: '2px solid #007BFF',
+                          padding: '8px 12px',
+                          borderRadius: '20px',
                           backgroundColor: computedColorScheme === "dark" ? "rgba(0, 123, 255, 0.08)" : "rgba(0, 123, 255, 0.15)",
-                          // width: '10 px',
-                          marginInline: '40px',
+                          marginInline: '20px',
                           boxShadow: '0 4px 12px rgba(0, 123, 255, 0.15)',
                           backdropFilter: 'blur(12px)',
                           WebkitBackdropFilter: 'blur(12px)',
@@ -2792,7 +3037,9 @@ const handleSubmitToTeacher = async () => {
                           { icon: <IconGraph size={24} />, value: "chat", label: "Referensi Pustaka" },
                           { icon: <IconList size={24} />, value: "bibliography", label: "Daftar Pustaka" },
                           { icon: <IconHistory size={24} />, value: "history", label: "Riwayat" },
-                          { icon: <IconHighlight size={24} />, value: "annotation", label: "Catatan" }, // baru
+                          { icon: <IconHighlight size={24} />, value: "annotation", label: "Catatan" },
+                          { icon: <IconEdit size={24} />, value: "draft", label: "Tulis Draft Artikel" },
+                          { icon: <IconActivity size={24} />, value: "activity", label: "Log Aktivitas", special: true },
                         ].map((item) => (
                           <Tooltip
                             key={item.value}
@@ -2806,11 +3053,24 @@ const handleSubmitToTeacher = async () => {
                           >
                             <ActionIcon
                               // key={item.value}
-                              onClick={() => setActiveTab(item.value)}
+                              onClick={() => {
+                                if (item.value === "activity") {
+                                  openActivityLog();
+                                } else {
+                                  setActiveTab(item.value);
+                                }
+                              }}
                               radius="xl"
                               size="lg"
-                              variant={activeTab === item.value ? "filled" : "light"}
-                              color="#007BFF"
+                              variant={
+                                item.value === "activity" 
+                                  ? "gradient" 
+                                  : activeTab === item.value 
+                                    ? "filled" 
+                                    : "light"
+                              }
+                              color={item.value === "activity" ? "orange" : "#007BFF"}
+                              gradient={item.value === "activity" ? { from: 'orange', to: 'red' } : undefined}
                               style={{
                                 // border: activeTab === item.value ? "2px solid transparent" : "2px solid #007BFF",
                                 // backgroundColor: activeTab === item.value ? "#007BFF" : "transparent",
@@ -2839,6 +3099,105 @@ const handleSubmitToTeacher = async () => {
                           <Box style={{ flex: 1, overflow: 'auto' }}>
                             <AnnotationPanel sessionId={sessionIdN} />
                           </Box>
+                        )}
+                        {activeTab === "draft" && (
+                          <>
+                            {/* Header dengan info draft */}
+                            <Group align="center" justify="space-between" mb="md">
+                              <Group align="center" gap="sm">
+                                <Box
+                                  style={{
+                                    borderRadius: "12px",
+                                    backgroundColor: "#007BFF",
+                                    padding: "8px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <IconEdit size={18} color="#fff" />
+                                </Box>
+                                <div>
+                                  <Title
+                                    order={4}
+                                    size="sm"
+                                    style={{
+                                      color: "#007BFF",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    Tulis Draft Artikel
+                                  </Title>
+                                  <Text size="xs" c="dimmed" mt={-4}>
+                                    Buat draft artikel berdasarkan referensi
+                                  </Text>
+                                </div>
+                              </Group>
+                            </Group>
+
+                            {/* Area untuk menulis draft */}
+                            <ScrollArea
+                              style={{
+                                maxHeight: 'calc(100vh - 200px)',
+                                minHeight: '200px',
+                                border: '1px solid #e9ecef',
+                                borderRadius: '8px',
+                                padding: '16px',
+                                backgroundColor: '#f8f9fa'
+                              }}
+                            >
+                              <Stack gap="md">
+                                <TextInput
+                                  placeholder="Judul artikel..."
+                                  size="md"
+                                  value={draftTitle}
+                                  onChange={(e) => handleDraftTitleChange(e.target.value)}
+                                  styles={{
+                                    input: {
+                                      fontSize: '18px',
+                                      fontWeight: 600,
+                                      border: 'none',
+                                      backgroundColor: 'transparent'
+                                    }
+                                  }}
+                                />
+                                
+                                <Text size="sm" c="dimmed" mt="md">
+                                  💡 Tips: Gunakan referensi dari tab "Referensi Pustaka" dan sitasi dari "Daftar Pustaka" untuk memperkuat artikel Anda.
+                                </Text>
+
+                                <Group gap="md" mt="lg">
+                                  <Button 
+                                    leftSection={<IconPlus size={16} />} 
+                                    variant="light"
+                                    size="sm"
+                                    onClick={addParagraph}
+                                  >
+                                    Tambah Paragraf
+                                  </Button>
+                                  <Button 
+                                    leftSection={<IconQuote size={16} />} 
+                                    variant="light"
+                                    color="teal"
+                                    size="sm"
+                                    onClick={insertQuote}
+                                  >
+                                    Sisipkan Kutipan
+                                  </Button>
+                                  <Button 
+                                    leftSection={<IconList size={16} />} 
+                                    variant="light"
+                                    color="grape"
+                                    size="sm"
+                                    onClick={addBulletList}
+                                  >
+                                    Daftar Poin
+                                  </Button>
+                                </Group>
+
+                              </Stack>
+                            </ScrollArea>
+                          </>
                         )}
                         {activeTab === "chat" && (
                           <>
@@ -2890,7 +3249,8 @@ const handleSubmitToTeacher = async () => {
                                 placeholder="Cari Artikel"
                                 variant="filled"
                                 leftSection={<IconSearch size={16} />}
-                                value={searchQuery}
+                                value={isClient ? searchQuery : ""}
+                                suppressHydrationWarning={true}
                                 style={{
                                   backgroundColor:
                                     computedColorScheme === "dark"
@@ -3526,9 +3886,12 @@ const handleSubmitToTeacher = async () => {
                   
                   <Box style={{ flex: 1, overflow: "hidden", position: "relative" }}>
                     {/* BlockNote Editor Component dengan AI Indonesia */}
+                    {isClient ? (
                       <BlockNoteEditorComponent
                         ref={editorRef}
                         onContentChange={handleContentChange}
+                        onLogFormula={logFormula}
+                        onLogEdit={logEdit}
                         style={{
                           flex: 1,
                           overflow: 'hidden',
@@ -3541,6 +3904,19 @@ const handleSubmitToTeacher = async () => {
                         isFromBrainstorming={isFromBrainstorming}
                         nodesData={article}
                       />
+                    ) : (
+                      <Box
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '400px'
+                        }}
+                      >
+                        <Text size="sm" c="dimmed">Loading editor...</Text>
+                      </Box>
+                    )}
                       {isScanning && (
                         /* Scanning Overlay */
                         <Box
@@ -3626,9 +4002,10 @@ const handleSubmitToTeacher = async () => {
                       style={{
                         transition: 'all 0.2s ease',
                       }}
-                      disabled={isScanning}
+                      disabled={isScanning || loading}
+                      loading={loading}
                     >
-                      Simpan Draft
+                      {loading ? 'Menyimpan...' : 'Simpan Draft'}
                     </Button>
 
                     <Button 
@@ -3681,12 +4058,10 @@ const handleSubmitToTeacher = async () => {
                       alignItems: 'center',
                       gap: '16px',
                       marginBottom: '20px',
-                      padding: '10px 16px',
-                      borderRadius: '16px',
-                      // border: '2px solid #007BFF',
+                      padding: '8px 12px',
+                      borderRadius: '20px',
                       backgroundColor: computedColorScheme === "dark" ? "rgba(0, 123, 255, 0.08)" : "rgba(0, 123, 255, 0.15)",
-                      // width: '10 px',
-                      marginInline: '40px',
+                      marginInline: '20px',
                       boxShadow: '0 4px 12px rgba(0, 123, 255, 0.15)',
                       backdropFilter: 'blur(12px)',
                       WebkitBackdropFilter: 'blur(12px)',
@@ -3697,7 +4072,9 @@ const handleSubmitToTeacher = async () => {
                       { icon: <IconGraph size={24} />, value: "chat", label: "Referensi Pustaka" },
                       { icon: <IconList size={24} />, value: "bibliography", label: "Daftar Pustaka" },
                       { icon: <IconHistory size={24} />, value: "history", label: "Riwayat" },
-                      { icon: <IconHighlight size={24} />, value: "annotation", label: "Catatan" }, // baru
+                      { icon: <IconHighlight size={24} />, value: "annotation", label: "Catatan" },
+                      { icon: <IconEdit size={24} />, value: "draft", label: "Tulis Draft Artikel" },
+                      { icon: <IconActivity size={24} />, value: "activity", label: "Log Aktivitas", special: true },
                     ].map((item) => (
                       <Tooltip
                         key={item.value}
@@ -3711,18 +4088,24 @@ const handleSubmitToTeacher = async () => {
                       >
                         <ActionIcon
                           // key={item.value}
-                          onClick={() => setActiveTab(item.value)}
+                          onClick={() => {
+                            if (item.value === "activity") {
+                              openActivityLog();
+                            } else {
+                              setActiveTab(item.value);
+                            }
+                          }}
                           radius="xl"
                           size="lg"
-                          variant={activeTab === item.value ? "filled" : "light"}
+                          variant={item.value !== "activity" && activeTab === item.value ? "filled" : "light"}
                           color="#007BFF"
                           style={{
                             // border: activeTab === item.value ? "2px solid transparent" : "2px solid #007BFF",
                             // backgroundColor: activeTab === item.value ? "#007BFF" : "transparent",
                             // color: activeTab === item.value ? "#fff" : "#007BFF",
                             transition: 'all 0.3s ease',
-                            boxShadow: activeTab === item.value ? '0 0 8px rgba(0, 123, 255, 0.4)' : 'none',
-                            transform: activeTab === item.value ? 'scale(1.1)' : 'scale(1)',
+                            boxShadow: (item.value !== "activity" && activeTab === item.value) ? '0 0 8px rgba(0, 123, 255, 0.4)' : 'none',
+                            transform: (item.value !== "activity" && activeTab === item.value) ? 'scale(1.1)' : 'scale(1)',
                           }}
                         >
                           {item.icon}
@@ -3744,6 +4127,103 @@ const handleSubmitToTeacher = async () => {
                       <Box style={{ flex: 1, overflow: 'auto' }}>
                         <AnnotationPanel sessionId={sessionIdN} />
                       </Box>
+                    )}
+                    {activeTab === "draft" && (
+                      <>
+                        {/* Header dengan info draft */}
+                        <Group align="center" justify="space-between" mb="md">
+                          <Group align="center" gap="sm">
+                            <Box
+                              style={{
+                                borderRadius: "12px",
+                                backgroundColor: "#007BFF",
+                                padding: "8px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconEdit size={18} color="#fff" />
+                            </Box>
+                            <div>
+                              <Title
+                                order={4}
+                                size="sm"
+                                style={{
+                                  color: "#007BFF",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Tulis Draft Artikel
+                              </Title>
+                              <Text size="xs" c="dimmed" mt={-4}>
+                                Buat draft artikel berdasarkan referensi
+                              </Text>
+                            </div>
+                          </Group>
+                        </Group>
+
+                        {/* Area untuk menulis draft */}
+                        <ScrollArea
+                          style={{
+                            maxHeight: 'calc(100vh - 200px)',
+                            minHeight: '200px',
+                            border: '1px solid #e9ecef',
+                            borderRadius: '8px',
+                            padding: '16px',
+                            backgroundColor: '#f8f9fa'
+                          }}
+                        >
+                          <Stack gap="md">
+                            <TextInput
+                              placeholder="Judul artikel..."
+                              size="md"
+                              styles={{
+                                input: {
+                                  fontSize: '18px',
+                                  fontWeight: 600,
+                                  border: 'none',
+                                  backgroundColor: 'transparent'
+                                }
+                              }}
+                            />
+                            
+                            <Text size="sm" c="dimmed" mt="md">
+                              💡 Tips: Gunakan referensi dari tab "Referensi Pustaka" dan sitasi dari "Daftar Pustaka" untuk memperkuat artikel Anda.
+                            </Text>
+
+                            <Group gap="md" mt="lg">
+                              <Button 
+                                leftSection={<IconPlus size={16} />} 
+                                variant="light"
+                                size="sm"
+                                onClick={addParagraph}
+                              >
+                                Tambah Paragraf
+                              </Button>
+                              <Button 
+                                leftSection={<IconQuote size={16} />} 
+                                variant="light"
+                                color="teal"
+                                size="sm"
+                                onClick={insertQuote}
+                              >
+                                Sisipkan Kutipan
+                              </Button>
+                              <Button 
+                                leftSection={<IconList size={16} />} 
+                                variant="light"
+                                color="grape"
+                                size="sm"
+                                onClick={addBulletList}
+                              >
+                                Daftar Poin
+                              </Button>
+                            </Group>
+
+                          </Stack>
+                        </ScrollArea>
+                      </>
                     )}
                     {activeTab === "chat" && (
                       <>
@@ -3795,7 +4275,8 @@ const handleSubmitToTeacher = async () => {
                             placeholder="Cari Artikel"
                             variant="filled"
                             leftSection={<IconSearch size={16} />}
-                            value={searchQuery}
+                            value={isClient ? searchQuery : ""}
+                            suppressHydrationWarning={true}
                             style={{
                               backgroundColor:
                                 computedColorScheme === "dark"
@@ -5236,6 +5717,20 @@ const handleSubmitToTeacher = async () => {
           }
         `}</style>
       </AppShell.Main>
+
+      {/* Activity Log Modal */}
+      {isClient && (
+        <ActivityLog
+          opened={activityLogOpened}
+          onClose={closeActivityLog}
+          activities={activities}
+          onClearAll={() => {
+            clearActivityLog();
+            logTransform('Log Dibersihkan', 'Semua riwayat aktivitas telah dihapus');
+          }}
+          onExport={exportLog}
+        />
+      )}
     </AppShell>
   );
 }

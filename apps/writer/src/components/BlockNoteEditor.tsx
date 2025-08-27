@@ -63,6 +63,7 @@ import { generateText } from "ai";
 import "katex/dist/katex.min.css";
 import React, { forwardRef, useCallback, useImperativeHandle } from "react";
 import Katex from "react-katex";
+const LaTeXModal = React.lazy(() => import("./LaTeXModal"));
 
 // Types
 interface HeadingInfo {
@@ -131,6 +132,8 @@ interface BlockNoteEditorProps {
   projectId?: string;
   isFromBrainstorming?: boolean;
   nodesData?: Article[];
+  onLogFormula?: (formula: string, result: string) => void;
+  onLogEdit?: (title: string, oldValue?: string, newValue?: string, wordCount?: number) => void;
 }
 
 interface ContinueWritingState {
@@ -342,7 +345,7 @@ const animationStyles = `
 // Main component
 const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorProps>(
   function BlockNoteEditorComponent(
-    { onContentChange, style }: BlockNoteEditorProps,
+    { onContentChange, style, onLogFormula, onLogEdit }: BlockNoteEditorProps,
     ref
   ) {
     const computedColorScheme = useComputedColorScheme("light");
@@ -407,6 +410,9 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       query: "",
     });
     const inlineAIRef = useClickOutside(() => setInlineAIState(prev => ({ ...prev, isVisible: false })));
+
+    // LaTeX Modal state
+    const [isLatexModalOpen, setIsLatexModalOpen] = React.useState(false);
 
     // Enhanced AI Streaming state with progress
     const [aiStreamingState, setAIStreamingState] = React.useState<AIStreamingState>({
@@ -724,6 +730,195 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       canUndo,
       canRedo,
     }));
+
+    // LaTeX Modal handlers
+    const handleLatexInsert = useCallback((formula: string) => {
+      // Calculate the actual mathematical result and show ONLY the result
+      let finalText = "";
+      
+      try {
+        // Clean formula first
+        const cleanFormula = formula.trim();
+        
+        // Square root: √x
+        if (cleanFormula.includes("\\sqrt{") && cleanFormula.includes("}")) {
+          const match = cleanFormula.match(/\\sqrt\{(\d+(?:\.\d+)?)\}/);
+          if (match) {
+            const number = parseFloat(match[1]);
+            const result = Math.sqrt(number);
+            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
+          }
+        } 
+        // Power of 2: x^2
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^2$/)) {
+          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^2$/);
+          if (match) {
+            const number = parseFloat(match[1]);
+            const result = number * number;
+            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
+          }
+        } 
+        // Pythagorean theorem complete: a^2 + b^2 = c^2
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^2 \+ \d+(?:\.\d+)?\^2 = \d+(?:\.\d+)?\^2$/)) {
+          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^2 \+ (\d+(?:\.\d+)?)\^2 = (\d+(?:\.\d+)?)\^2$/);
+          if (match) {
+            const a = parseFloat(match[1]);
+            const b = parseFloat(match[2]);
+            const c = parseFloat(match[3]);
+            const leftSide = (a * a) + (b * b);
+            const rightSide = c * c;
+            const isCorrect = Math.abs(leftSide - rightSide) < 0.001;
+            finalText = `${leftSide} = ${rightSide} (${isCorrect ? 'Benar ✓' : 'Salah ✗'})`;
+          }
+        }
+        // Pythagorean theorem incomplete: a^2 + b^2 = [c]^2 (calculate c)
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^2 \+ \d+(?:\.\d+)?\^2 = \[c\]\^2$/)) {
+          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^2 \+ (\d+(?:\.\d+)?)\^2 = \[c\]\^2$/);
+          if (match) {
+            const a = parseFloat(match[1]);
+            const b = parseFloat(match[2]);
+            const cSquared = (a * a) + (b * b);
+            const c = Math.sqrt(cSquared);
+            finalText = `c = ${c % 1 === 0 ? c.toString() : c.toFixed(2)} (karena ${a}² + ${b}² = ${cSquared})`;
+          }
+        }
+        // Fraction: a/b or \frac{a}{b}
+        else if (cleanFormula.includes("\\frac{") && cleanFormula.includes("}{")) {
+          const match = cleanFormula.match(/\\frac\{(\d+(?:\.\d+)?)\}\{(\d+(?:\.\d+)?)\}/);
+          if (match) {
+            const num = parseFloat(match[1]);
+            const den = parseFloat(match[2]);
+            if (den !== 0) {
+              const result = num / den;
+              finalText = result % 1 === 0 ? result.toString() : result.toFixed(4);
+            } else {
+              finalText = "Error: Tidak boleh dibagi nol!";
+            }
+          }
+        } 
+        // Basic operations
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?\+\d+(?:\.\d+)?$/)) {
+          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\+(\d+(?:\.\d+)?)$/);
+          if (match) {
+            const a = parseFloat(match[1]);
+            const b = parseFloat(match[2]);
+            const result = a + b;
+            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
+          }
+        } 
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?\-\d+(?:\.\d+)?$/)) {
+          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\-(\d+(?:\.\d+)?)$/);
+          if (match) {
+            const a = parseFloat(match[1]);
+            const b = parseFloat(match[2]);
+            const result = a - b;
+            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
+          }
+        } 
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?\*\d+(?:\.\d+)?$/)) {
+          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\*(\d+(?:\.\d+)?)$/);
+          if (match) {
+            const a = parseFloat(match[1]);
+            const b = parseFloat(match[2]);
+            const result = a * b;
+            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
+          }
+        } 
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/)) {
+          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/);
+          if (match) {
+            const a = parseFloat(match[1]);
+            const b = parseFloat(match[2]);
+            if (b !== 0) {
+              const result = a / b;
+              finalText = result % 1 === 0 ? result.toString() : result.toFixed(4);
+            } else {
+              finalText = "Error: Tidak boleh dibagi nol!";
+            }
+          }
+        }
+        // Advanced operations with parentheses
+        else if (cleanFormula.includes("(") && cleanFormula.includes(")")) {
+          try {
+            // Handle formulas like (a+b)/2, (fahrenheit-32)*5/9, etc.
+            let evalFormula = cleanFormula.replace(/\[|\]/g, ""); // Remove brackets
+            
+            // Safety check - only allow numbers, basic operators, and parentheses
+            if (/^[\d\.\+\-\*\/\(\)\s]+$/.test(evalFormula)) {
+              const result = Function(`"use strict"; return (${evalFormula})`)();
+              finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
+            }
+          } catch (e) {
+            // Fall through to default handling
+          }
+        }
+        // Power operations (base^exponent)
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^\d+(?:\.\d+)?$/)) {
+          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^(\d+(?:\.\d+)?)$/);
+          if (match) {
+            const base = parseFloat(match[1]);
+            const exponent = parseFloat(match[2]);
+            const result = Math.pow(base, exponent);
+            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
+          }
+        }
+        // Cube operations (x^3)
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^3$/)) {
+          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^3$/);
+          if (match) {
+            const number = parseFloat(match[1]);
+            const result = number * number * number;
+            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
+          }
+        }
+        // Simple number
+        else if (cleanFormula.match(/^\d+(?:\.\d+)?$/)) {
+          finalText = cleanFormula;
+        }
+        
+        // If no calculation was possible, show helpful message
+        if (!finalText) {
+          finalText = `"${cleanFormula}" - Format tidak dikenali. Coba: 9^2, √16, 5+3, atau 3^2+4^2=5^2`;
+        }
+      } catch (e) {
+        finalText = `Error: "${formula}" - Pastikan format benar (contoh: 5+3, √9, 2^2)`;
+      }
+
+      // Log the formula calculation
+      if (onLogFormula && !finalText.includes('Error:') && !finalText.includes('Format tidak dikenali')) {
+        onLogFormula(formula, finalText);
+      }
+
+      // Insert ONLY the calculated result
+      editor.insertBlocks(
+        [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: finalText,
+                styles: {
+                  backgroundColor: "#e6f3ff",
+                  textColor: "#0066cc",
+                  bold: true
+                }
+              }
+            ],
+          }
+        ],
+        editor.getTextCursorPosition().block,
+        "after"
+      );
+    }, [editor]);
+
+    const openLatexModal = useCallback(() => {
+      setIsLatexModalOpen(true);
+    }, []);
+
+    const closeLatexModal = useCallback(() => {
+      setIsLatexModalOpen(false);
+    }, []);
 
     // Enhanced AI Progress simulation
     const simulateAIProgress = useCallback(async (
@@ -2537,34 +2732,16 @@ INSTRUKSI:
         },
         // ############### PERBAIKAN LATEX DIMULAI DI SINI ###############
         {
-          title: "LaTeX",
-          onItemClick: () => {
-            const { state } = (editor as any)._tiptapEditor;
-            const { from } = state.selection;
-        
-            // Insert a new paragraph with a sample LaTeX formula.
-            // The user will then replace the sample with their own formula.
-            // Note: For actual rendering, a custom BlockNote block with KaTeX is needed.
-            // This implementation correctly sets up the slash command to insert the formula text.
-            editor.insertBlocks(
-              [
-                {
-                  type: "paragraph",
-                  content: "x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}", // Example LaTeX formula
-                },
-              ],
-              editor.getTextCursorPosition().block,
-              "after"
-            );
-          },
-          aliases: ["latex", "math", "equation", "formula"],
+          title: "LaTeX Formula",
+          onItemClick: openLatexModal,
+          aliases: ["latex", "math", "equation", "formula", "rumus", "matematika"],
           group: "Formatting",
-          subtext: "Sisipkan formula matematika menggunakan LaTeX.",
+          subtext: "Sisipkan formula matematika menggunakan LaTeX",
           icon: <IconMath size={18} />,
         },
         // ############### PERBAIKAN LATEX SELESAI DI SINI ###############
       ];
-    }, [aiModel, openAIModal, editor]);
+    }, [aiModel, openAIModal, editor, openLatexModal]);
 
     // Custom Slash Menu Items
     const getCustomSlashMenuItems = React.useMemo(() => {
@@ -3757,6 +3934,17 @@ INSTRUKSI:
             </Group>
           </Stack>
         </Modal>
+
+        {/* LaTeX Modal with Suspense */}
+        {isLatexModalOpen && (
+          <React.Suspense fallback={null}>
+            <LaTeXModal
+              opened={isLatexModalOpen}
+              onClose={closeLatexModal}
+              onInsert={handleLatexInsert}
+            />
+          </React.Suspense>
+        )}
 
       </>
     );
