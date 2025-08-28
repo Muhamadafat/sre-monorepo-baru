@@ -4,6 +4,10 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:main": "cd apps/main && npx next dev -p 3000",
+    "dev:brain": "cd apps/brain && npx next dev -p 3001", 
+    "dev:profile": "cd apps/profile && npx next dev -p 3002",
+    "dev:writer": "cd apps/writer && npx next dev -p 3003",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",

@@ -2,7 +2,7 @@
 
 // import { createGroq } from "@ai-sdk/groq";
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { Block, BlockNoteEditor, PartialBlock, filterSuggestionItems } from "@blocknote/core";
+import { Block, BlockNoteEditor, PartialBlock, BlockNoteSchema, defaultInlineContentSpecs, defaultStyleSpecs, filterSuggestionItems, InlineContentSchema, StyleSchema, createStyleSpec } from "@blocknote/core";
 import "@blocknote/core/fonts/inter.css";
 import { BlockNoteView } from "@blocknote/mantine";
 import "@blocknote/mantine/style.css";
@@ -10,6 +10,8 @@ import {
   SuggestionMenuController,
   getDefaultReactSlashMenuItems,
   useCreateBlockNote,
+  FormattingToolbar,
+  FormattingToolbarController,
 } from "@blocknote/react";
 import {
   ActionIcon,
@@ -61,7 +63,7 @@ import {
 } from "@tabler/icons-react";
 import { generateText } from "ai";
 import "katex/dist/katex.min.css";
-import React, { forwardRef, useCallback, useImperativeHandle } from "react";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle } from "react";
 import Katex from "react-katex";
 const LaTeXModal = React.lazy(() => import("./LaTeXModal"));
 
@@ -340,7 +342,39 @@ const animationStyles = `
   .ai-progress-container {
     animation: progress-pulse 2s infinite;
   }
+
+  /* Simple Citation Styling - Manual approach */
+  .bn-citation {
+    color: #2563eb !important;
+    background: rgba(37, 99, 235, 0.08) !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    font-weight: 500 !important;
+    border: 1px solid rgba(37, 99, 235, 0.2) !important;
+    transition: all 0.2s ease !important;
+    display: inline-block !important;
+    font-size: 0.9em !important;
+  }
+
+  .bn-citation:hover {
+    color: #1d4ed8 !important;
+    background: rgba(37, 99, 235, 0.15) !important;
+    border-color: rgba(37, 99, 235, 0.4) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15) !important;
+  }
+
+  /* Citation styling */
+  .citation-highlight {
+    color: #2563eb !important;
+    font-weight: 500 !important;
+    background-color: rgba(37, 99, 235, 0.1) !important;
+    padding: 1px 3px !important;
+    border-radius: 3px !important;
+    border: 1px solid rgba(37, 99, 235, 0.2) !important;
+  }
 `;
+
 
 // Main component
 const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorProps>(
@@ -366,6 +400,81 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
         const styleElement = document.getElementById('blocknote-animations');
         if (styleElement) {
           styleElement.remove();
+        }
+      };
+    }, []);
+
+    // Citation styling with keyboard detection
+    React.useEffect(() => {
+      const handleKeyUp = (event: Event) => {
+        const keyEvent = event as KeyboardEvent;
+        if (keyEvent.key === ']') {
+          // When user types ']', check if they just completed a citation
+          setTimeout(() => {
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0);
+              const textNode = range.startContainer;
+              const text = textNode.textContent || '';
+              
+              // Look for citation pattern ending with the cursor position
+              const cursorPos = range.startOffset;
+              const beforeCursor = text.substring(0, cursorPos);
+              const citationMatch = beforeCursor.match(/\[([^\]]+)\]$/);
+              
+              if (citationMatch && textNode.parentElement) {
+                const parent = textNode.parentElement;
+                const citationText = citationMatch[0];
+                const citationStart = beforeCursor.lastIndexOf(citationText);
+                
+                // Create a styled span to replace the citation
+                const newHTML = text.substring(0, citationStart) + 
+                  `<span class="bn-citation">${citationText}</span>` + 
+                  text.substring(cursorPos);
+                
+                parent.innerHTML = newHTML;
+                
+                // Restore cursor position
+                const newRange = document.createRange();
+                const walker = document.createTreeWalker(
+                  parent,
+                  NodeFilter.SHOW_TEXT,
+                  null
+                );
+                
+                let currentPos = 0;
+                let targetNode = null;
+                let node;
+                
+                while (node = walker.nextNode()) {
+                  const nodeLength = node.textContent?.length || 0;
+                  if (currentPos + nodeLength >= cursorPos) {
+                    targetNode = node;
+                    break;
+                  }
+                  currentPos += nodeLength;
+                }
+                
+                if (targetNode) {
+                  newRange.setStart(targetNode, cursorPos - currentPos);
+                  newRange.collapse(true);
+                  selection.removeAllRanges();
+                  selection.addRange(newRange);
+                }
+              }
+            }
+          }, 50);
+        }
+      };
+
+      const proseMirrorContent = document.querySelector('.ProseMirror');
+      if (proseMirrorContent) {
+        proseMirrorContent.addEventListener('keyup', handleKeyUp);
+      }
+
+      return () => {
+        if (proseMirrorContent) {
+          proseMirrorContent.removeEventListener('keyup', handleKeyUp);
         }
       };
     }, []);
@@ -454,7 +563,15 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     }, []);
 
     // BlockNote Editor setup with history tracking
+    // Create schema with default styles only
+    const schema = BlockNoteSchema.create({
+      styleSpecs: {
+        ...defaultStyleSpecs,
+      },
+    });
+
     const editor = useCreateBlockNote({
+      schema,
       initialContent: [
         {
           type: "paragraph",
@@ -714,15 +831,133 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       getContent: () => editor.document,
       insertCitation: (citationText: string) => {
         if (citationText) {
-          editor.insertInlineContent(
-            [
-              {
-                type: "text",
-                text: citationText,
-                styles: {},
-              },
-            ]
-          );
+          // Format citation text
+          const formattedText = citationText.startsWith('[') && citationText.endsWith(']') 
+            ? citationText 
+            : `[${citationText}]`;
+          
+          console.log('=== INSERTING CITATION ===', formattedText);
+          
+          // DIRECT SPAN INSERT WITH BLUE COLOR
+          const proseMirror = document.querySelector('.ProseMirror');
+          console.log('ProseMirror found:', !!proseMirror);
+          
+          if (proseMirror) {
+            const selection = window.getSelection();
+            console.log('Selection:', selection);
+            console.log('Selection rangeCount:', selection?.rangeCount);
+            
+            if (selection && selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0);
+              
+              // Create BLUE span directly with MAXIMUM styling
+              const citationSpan = document.createElement('span');
+              citationSpan.className = 'citation-blue';
+              citationSpan.textContent = formattedText;
+              citationSpan.style.cssText = 'color: #007bff !important; font-weight: 700 !important; font-style: normal !important;';
+              
+              // Also set individual properties for maximum override
+              citationSpan.style.setProperty('color', '#007bff', 'important');
+              citationSpan.style.setProperty('font-weight', '700', 'important');
+              
+              console.log('Created blue citation span:', citationSpan);
+              
+              // Insert span
+              range.deleteContents();
+              range.insertNode(citationSpan);
+              
+              // Move cursor after citation
+              range.setStartAfter(citationSpan);
+              range.collapse(true);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              
+              console.log('✅ Citation inserted as BLUE SPAN');
+              
+              // EXTREME DEBUG - CHECK WHAT HAPPENS TO OUR SPAN
+              const debugCitation = () => {
+                console.log('=== CITATION SPAN DEBUG ===');
+                console.log('Span element:', citationSpan);
+                console.log('Span innerHTML:', citationSpan.innerHTML);
+                console.log('Span textContent:', citationSpan.textContent);
+                console.log('Span className:', citationSpan.className);
+                console.log('Span style.cssText:', citationSpan.style.cssText);
+                console.log('Computed color:', window.getComputedStyle(citationSpan).color);
+                console.log('Computed font-weight:', window.getComputedStyle(citationSpan).fontWeight);
+                console.log('Parent element:', citationSpan.parentElement);
+                console.log('Parent innerHTML:', citationSpan.parentElement?.innerHTML);
+                
+                // FORCE STYLING AGAIN
+                citationSpan.style.setProperty('color', '#007bff', 'important');
+                citationSpan.style.setProperty('font-weight', '700', 'important');
+                citationSpan.setAttribute('style', 'color: #007bff !important; font-weight: 700 !important;');
+                
+                console.log('After force styling - cssText:', citationSpan.style.cssText);
+              };
+              
+              // Run debug immediately and after delays
+              setTimeout(debugCitation, 10);
+              setTimeout(debugCitation, 100);
+              setTimeout(debugCitation, 500);
+              
+              return;
+            }
+          }
+          
+          // Fallback - insert and style
+          console.log('🚨 USING FALLBACK INSERTION');
+          editor.insertInlineContent(formattedText);
+          
+          setTimeout(() => {
+            console.log('🔍 FALLBACK STYLING ATTEMPT');
+            const proseMirror = document.querySelector('.ProseMirror');
+            if (proseMirror) {
+              console.log('ProseMirror found in fallback');
+              
+              // Find text node with citation
+              const walker = document.createTreeWalker(
+                proseMirror,
+                NodeFilter.SHOW_TEXT,
+                null
+              );
+              
+              let textNode;
+              let nodeCount = 0;
+              while (textNode = walker.nextNode()) {
+                nodeCount++;
+                console.log(`Text node ${nodeCount}:`, textNode.textContent);
+                
+                if (textNode.textContent?.includes(formattedText)) {
+                  console.log('🎯 Found citation in text node!');
+                  const parent = textNode.parentElement;
+                  console.log('Parent element:', parent);
+                  console.log('Parent innerHTML:', parent?.innerHTML);
+                  
+                  if (parent && !parent.querySelector('.citation-blue')) {
+                    const text = textNode.textContent;
+                    const newHTML = text.replace(
+                      formattedText, 
+                      `<span class="citation-blue" style="color: #007bff !important; font-weight: 700 !important; background-color: yellow !important;">${formattedText}</span>`
+                    );
+                    console.log('Old HTML:', parent.innerHTML);
+                    console.log('New HTML with citation:', newHTML);
+                    
+                    parent.innerHTML = parent.innerHTML.replace(text, newHTML);
+                    console.log('✅ Citation styled in fallback with YELLOW background');
+                    console.log('Final HTML:', parent.innerHTML);
+                    break;
+                  } else {
+                    console.log('❌ Parent not found or citation already styled');
+                  }
+                }
+              }
+              console.log(`Total text nodes checked: ${nodeCount}`);
+            } else {
+              console.log('❌ ProseMirror not found in fallback');
+            }
+          }, 50);
+          
+          console.log('Used fallback insertion');
         }
       },
       undo,
@@ -1947,16 +2182,33 @@ INSTRUKSI:
                 const rect = blockElement.getBoundingClientRect();
                 const contextText = extractContextFromCursor();
 
-                // Position the button to the right of the current block
-                const buttonX = rect.right + 10; // 10px margin from the right edge of block
-                const buttonY = rect.top + (rect.height / 2) - 20; // Center vertically on the block
+                // Position the button BELOW the text block (like in the image)
+                const selection = window.getSelection();
+                let buttonX = rect.left; // Start from left edge of block
+                let buttonY = rect.bottom + 8; // 8px below the block
+                
+                // Try to get more precise cursor position for horizontal alignment
+                if (selection && selection.rangeCount > 0) {
+                  try {
+                    const range = selection.getRangeAt(0);
+                    const rangeRect = range.getBoundingClientRect();
+                    
+                    if (rangeRect.width > 0 || rangeRect.height > 0) {
+                      // Align button horizontally with cursor position
+                      buttonX = rangeRect.left; // Align with cursor
+                      buttonY = rect.bottom + 8; // Still below the block
+                    }
+                  } catch (e) {
+                    console.log('Could not get selection range rect, using block position');
+                  }
+                }
 
                 // Make sure button stays within viewport
                 const viewportWidth = window.innerWidth;
                 const viewportHeight = window.innerHeight;
 
-                const finalX = Math.min(buttonX, viewportWidth - 80); // Ensure button doesn't go off-screen
-                const finalY = Math.max(20, Math.min(buttonY, viewportHeight - 80)); // Keep within viewport
+                const finalX = Math.max(10, Math.min(buttonX, viewportWidth - 200)); // Keep within viewport width
+                const finalY = Math.min(buttonY, viewportHeight - 80); // Keep within viewport height
 
                 setContinueState({
                   isVisible: true,
@@ -1986,8 +2238,8 @@ INSTRUKSI:
                   setContinueState({
                     isVisible: true,
                     position: {
-                      x: rect.right - 60,
-                      y: rect.top + 100 // Approximate position
+                      x: rect.left, // Align with left edge of block
+                      y: rect.bottom + 8 // Below the block
                     },
                     currentBlock,
                     contextText
@@ -2835,6 +3087,40 @@ INSTRUKSI:
       };
     }, [editor, onContentChange]);
 
+    // MINIMAL CSS ONLY - NO AUTO STYLING
+    useEffect(() => {
+      console.log('ADDING MINIMAL CITATION CSS ONLY');
+      
+      // Remove existing
+      const existing = document.getElementById('citation-styles');
+      if (existing) existing.remove();
+      
+      // MINIMAL CSS  
+      const style = document.createElement('style');
+      style.id = 'citation-styles';
+      style.innerHTML = `
+        /* NUCLEAR CITATION STYLING */
+        .citation-blue {
+          color: #007bff !important;
+          font-weight: 700 !important;
+          font-style: normal !important;
+        }
+        
+        /* FORCE OVERRIDE ANY CONFLICTING STYLES */
+        span.citation-blue,
+        .ProseMirror span.citation-blue,
+        .ProseMirror .citation-blue,
+        [class*="citation-blue"] {
+          color: #007bff !important;
+          font-weight: 700 !important;
+          font-style: normal !important;
+        }
+      `;
+      document.head.appendChild(style);
+      
+      console.log('✅ CSS added - NO AUTO STYLING WILL RUN');
+    }, []);
+
     const clearInputs = () => {
       setPrompt("");
       setGeneratedContent("");
@@ -2929,13 +3215,14 @@ INSTRUKSI:
                   </ActionIcon>
                 </Tooltip>
                 <Button
-                  variant="outline"
-                  color="red"
-                  onClick={openDeleteConfirmation}
-                  leftSection={<IconTrash size={14} />}
-                >
-                  Hapus Semua
-                </Button>
+                variant="outline"
+                color="red"
+                size="compact-md"
+                onClick={openDeleteConfirmation}
+              >
+                <IconTrash size={18} />
+              </Button>
+
               </Group>
 
               <Group gap="sm">
