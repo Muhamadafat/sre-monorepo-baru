@@ -345,11 +345,8 @@ const animationStyles = `
 
   /* Simple Citation Styling - Manual approach */
   .bn-citation {
-    color: #2563eb !important;
-    background: rgba(37, 99, 235, 0.08) !important;
-    padding: 2px 6px !important;
-    border-radius: 4px !important;
-    font-weight: 500 !important;
+    color: blue !important;
+    font-weight: bold !important;
     border: 1px solid rgba(37, 99, 235, 0.2) !important;
     transition: all 0.2s ease !important;
     display: inline-block !important;
@@ -357,20 +354,14 @@ const animationStyles = `
   }
 
   .bn-citation:hover {
-    color: #1d4ed8 !important;
-    background: rgba(37, 99, 235, 0.15) !important;
-    border-color: rgba(37, 99, 235, 0.4) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15) !important;
+    color: blue !important;
+    font-weight: bold !important;
   }
 
   /* Citation styling */
   .citation-highlight {
-    color: #2563eb !important;
-    font-weight: 500 !important;
-    background-color: rgba(37, 99, 235, 0.1) !important;
-    padding: 1px 3px !important;
-    border-radius: 3px !important;
+    color: blue !important;
+    font-weight: bold !important;
     border: 1px solid rgba(37, 99, 235, 0.2) !important;
   }
 `;
@@ -838,68 +829,54 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           
           console.log('=== INSERTING CITATION ===', formattedText);
           
-          // DIRECT SPAN INSERT WITH BLUE COLOR
-          const proseMirror = document.querySelector('.ProseMirror');
-          console.log('ProseMirror found:', !!proseMirror);
+          // USE BLOCKNOTE'S NATIVE insertInlineContent METHOD
+          try {
+            editor.insertInlineContent([
+              {
+                type: "text",
+                text: formattedText,
+                styles: {
+                  textColor: "#3B82F6",
+                  bold: true,
+                },
+              },
+              {
+                type: "text",
+                text: " ",
+                styles: {
+                  textColor: "default",
+                  bold: false,
+                },
+              },
+            ]);
+            console.log('✅ Citation inserted using BlockNote API');
+            return;
+          } catch (error) {
+            console.log('BlockNote API failed, trying direct insertion');
+          }
           
+          // FALLBACK: DIRECT SPAN INSERT 
+          const proseMirror = document.querySelector('.ProseMirror');
           if (proseMirror) {
             const selection = window.getSelection();
-            console.log('Selection:', selection);
-            console.log('Selection rangeCount:', selection?.rangeCount);
-            
             if (selection && selection.rangeCount > 0) {
               const range = selection.getRangeAt(0);
               
-              // Create BLUE span directly with MAXIMUM styling
               const citationSpan = document.createElement('span');
               citationSpan.className = 'citation-blue';
               citationSpan.textContent = formattedText;
-              citationSpan.style.cssText = 'color: #007bff !important; font-weight: 700 !important; font-style: normal !important;';
+              citationSpan.style.cssText = 'color: blue !important; font-weight: bold !important;';
+              citationSpan.setAttribute('data-citation', 'true');
               
-              // Also set individual properties for maximum override
-              citationSpan.style.setProperty('color', '#007bff', 'important');
-              citationSpan.style.setProperty('font-weight', '700', 'important');
-              
-              console.log('Created blue citation span:', citationSpan);
-              
-              // Insert span
               range.deleteContents();
               range.insertNode(citationSpan);
               
-              // Move cursor after citation
               range.setStartAfter(citationSpan);
               range.collapse(true);
               selection.removeAllRanges();
               selection.addRange(range);
               
-              console.log('✅ Citation inserted as BLUE SPAN');
-              
-              // EXTREME DEBUG - CHECK WHAT HAPPENS TO OUR SPAN
-              const debugCitation = () => {
-                console.log('=== CITATION SPAN DEBUG ===');
-                console.log('Span element:', citationSpan);
-                console.log('Span innerHTML:', citationSpan.innerHTML);
-                console.log('Span textContent:', citationSpan.textContent);
-                console.log('Span className:', citationSpan.className);
-                console.log('Span style.cssText:', citationSpan.style.cssText);
-                console.log('Computed color:', window.getComputedStyle(citationSpan).color);
-                console.log('Computed font-weight:', window.getComputedStyle(citationSpan).fontWeight);
-                console.log('Parent element:', citationSpan.parentElement);
-                console.log('Parent innerHTML:', citationSpan.parentElement?.innerHTML);
-                
-                // FORCE STYLING AGAIN
-                citationSpan.style.setProperty('color', '#007bff', 'important');
-                citationSpan.style.setProperty('font-weight', '700', 'important');
-                citationSpan.setAttribute('style', 'color: #007bff !important; font-weight: 700 !important;');
-                
-                console.log('After force styling - cssText:', citationSpan.style.cssText);
-              };
-              
-              // Run debug immediately and after delays
-              setTimeout(debugCitation, 10);
-              setTimeout(debugCitation, 100);
-              setTimeout(debugCitation, 500);
-              
+              console.log('✅ Citation inserted as BLUE SPAN (fallback)');
               return;
             }
           }
@@ -937,7 +914,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
                     const text = textNode.textContent;
                     const newHTML = text.replace(
                       formattedText, 
-                      `<span class="citation-blue" style="color: #007bff !important; font-weight: 700 !important; background-color: yellow !important;">${formattedText}</span>`
+                      `<span class="citation-blue" style="color: blue !important; font-weight: bold !important;">${formattedText}</span>`
                     );
                     console.log('Old HTML:', parent.innerHTML);
                     console.log('New HTML with citation:', newHTML);
@@ -3099,26 +3076,40 @@ INSTRUKSI:
       const style = document.createElement('style');
       style.id = 'citation-styles';
       style.innerHTML = `
-        /* NUCLEAR CITATION STYLING */
-        .citation-blue {
-          color: #007bff !important;
-          font-weight: 700 !important;
-          font-style: normal !important;
+        /* NUCLEAR CITATION STYLING - MAXIMUM PRIORITY */
+        .citation-blue,
+        span.citation-blue,
+        .ProseMirror .citation-blue,
+        .ProseMirror span.citation-blue,
+        .bn-editor .citation-blue,
+        [class*="citation-blue"],
+        *[class*="citation-blue"] {
+          color: blue !important;
+          font-weight: bold !important;
+          background: transparent !important;
         }
         
-        /* FORCE OVERRIDE ANY CONFLICTING STYLES */
-        span.citation-blue,
-        .ProseMirror span.citation-blue,
-        .ProseMirror .citation-blue,
-        [class*="citation-blue"] {
-          color: #007bff !important;
-          font-weight: 700 !important;
-          font-style: normal !important;
+        /* ABSOLUTE OVERRIDE - USE HIGHEST SPECIFICITY */
+        .ProseMirror p span.citation-blue,
+        .ProseMirror div span.citation-blue,
+        .bn-editor p span.citation-blue,
+        .bn-editor div span.citation-blue {
+          color: blue !important;
+          font-weight: bold !important;
+          background: transparent !important;
+        }
+        
+        /* ADDITIONAL CITATION PATTERNS */
+        .ProseMirror span[data-citation="true"],
+        .bn-editor span[data-citation="true"] {
+          color: blue !important;
+          font-weight: bold !important;
         }
       `;
       document.head.appendChild(style);
       
       console.log('✅ CSS added - NO AUTO STYLING WILL RUN');
+      
     }, []);
 
     const clearInputs = () => {
