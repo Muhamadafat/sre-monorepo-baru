@@ -836,7 +836,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
                 type: "text",
                 text: formattedText,
                 styles: {
-                  textColor: "#3B82F6",
+                  textColor: "blue",
                   bold: true,
                 },
               },
