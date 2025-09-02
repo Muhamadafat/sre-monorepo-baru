@@ -26,6 +26,7 @@ import {
   Avatar,
   Divider,
   Card,
+  Progress,
 } from "@mantine/core"
 import {
   IconX,
@@ -600,14 +601,42 @@ export default function ChatPanel({
   }
 
   const LoadingMoreIndicator = () => {
+    const [loadingProgress, setLoadingProgress] = useState(0)
+
+    useEffect(() => {
+      if (!loadingMore) return
+
+      const interval = setInterval(() => {
+        setLoadingProgress((prev) => {
+          if (prev >= 90) return prev
+          return prev + 10 + Math.random() * 5
+        })
+      }, 200)
+
+      return () => {
+        clearInterval(interval)
+        setLoadingProgress(0)
+      }
+    }, [loadingMore])
+
     return (
       <Box p="md" style={{ textAlign: "center" }}>
-        <Group justify="center" gap="xs">
+        <Group justify="center" gap="xs" mb="sm">
           <Loader size="sm" color="blue" />
           <Text size="sm" c="dimmed" fw={500}>
             Memuat pesan sebelumnya...
           </Text>
+          <Badge variant="light" color="blue" size="xs">
+            {Math.round(loadingProgress)}%
+          </Badge>
         </Group>
+        <Progress
+          value={loadingProgress}
+          size="xs"
+          radius="xl"
+          color="blue"
+          style={{ width: "80%", margin: "0 auto" }}
+        />
       </Box>
     )
   }
@@ -794,6 +823,57 @@ export default function ChatPanel({
   }, [resetContext, onContextReset])
 
   const LoadingMessage = () => {
+    const [progress, setProgress] = useState(0)
+    const [stage, setStage] = useState("Memulai...")
+    const [timeElapsed, setTimeElapsed] = useState(0)
+    const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState(30)
+
+    useEffect(() => {
+      if (!isLoading) return
+
+      const startTime = Date.now()
+      const stages = [
+        { progress: 10, stage: "Memproses permintaan...", duration: 2000 },
+        { progress: 25, stage: "Menganalisis konteks dokumen...", duration: 3000 },
+        { progress: 45, stage: "Mencari informasi relevan...", duration: 4000 },
+        { progress: 65, stage: "Menghasilkan respons...", duration: 5000 },
+        { progress: 80, stage: "Menyempurnakan jawaban...", duration: 3000 },
+        { progress: 95, stage: "Menyelesaikan...", duration: 1000 },
+      ]
+
+      let currentStageIndex = 0
+      
+      const progressInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime
+        setTimeElapsed(Math.floor(elapsed / 1000))
+
+        if (currentStageIndex < stages.length) {
+          const currentStage = stages[currentStageIndex]
+          const nextStageTime = stages.slice(0, currentStageIndex + 1).reduce((sum, s) => sum + s.duration, 0)
+          
+          if (elapsed >= nextStageTime) {
+            setProgress(currentStage.progress)
+            setStage(currentStage.stage)
+            currentStageIndex++
+            
+            // Calculate estimated time remaining
+            const totalEstimatedTime = stages.reduce((sum, s) => sum + s.duration, 0)
+            const remaining = Math.max(0, Math.ceil((totalEstimatedTime - elapsed) / 1000))
+            setEstimatedTimeRemaining(remaining)
+          } else {
+            // Smooth progress within current stage
+            const stageStartTime = stages.slice(0, currentStageIndex).reduce((sum, s) => sum + s.duration, 0)
+            const stageProgress = (elapsed - stageStartTime) / currentStage.duration
+            const prevProgress = currentStageIndex > 0 ? stages[currentStageIndex - 1].progress : 0
+            const smoothProgress = prevProgress + (currentStage.progress - prevProgress) * Math.min(stageProgress, 1)
+            setProgress(Math.min(smoothProgress, currentStage.progress))
+          }
+        }
+      }, 100)
+
+      return () => clearInterval(progressInterval)
+    }, [isLoading])
+
     return (
       <Card
         shadow="sm"
@@ -811,36 +891,57 @@ export default function ChatPanel({
           overflow: "hidden",
         }}
       >
+        {/* Progress indicator at the top */}
         <Box
           style={{
             position: "absolute",
             top: 0,
             left: 0,
             right: 0,
-            height: "3px",
-            background: `linear-gradient(90deg, ${theme.colors.blue[6]}, ${theme.colors.cyan[5]}, ${theme.colors.violet[6]})`,
-            backgroundSize: "200% 100%",
-            animation: "shimmer 2s infinite",
+            height: "4px",
+            background: isDark ? theme.colors.dark[5] : theme.colors.gray[2],
+            overflow: "hidden",
           }}
-        />
-        <Group mb="xs" gap="sm">
-          <Avatar
-            size="sm"
-            radius="xl"
+        >
+          <Box
             style={{
-              background: `linear-gradient(135deg, ${theme.colors.blue[6]} 0%, ${theme.colors.cyan[5]} 100%)`,
+              height: "100%",
+              width: `${progress}%`,
+              background: `linear-gradient(90deg, ${theme.colors.blue[6]}, ${theme.colors.cyan[5]}, ${theme.colors.violet[6]})`,
+              backgroundSize: "200% 100%",
+              animation: "shimmer 2s infinite",
+              transition: "width 0.3s ease-out",
             }}
-          >
-            <IconBrain size={16} color="white" />
-          </Avatar>
-          <Text size="sm" fw={600} c={isDark ? theme.colors.gray[3] : theme.colors.gray[7]}>
-            AI Assistant
-          </Text>
+          />
+        </Box>
+
+        <Group mb="xs" gap="sm" justify="space-between">
+          <Group gap="sm">
+            <Avatar
+              size="sm"
+              radius="xl"
+              style={{
+                background: `linear-gradient(135deg, ${theme.colors.blue[6]} 0%, ${theme.colors.cyan[5]} 100%)`,
+              }}
+            >
+              <IconBrain size={16} color="white" />
+            </Avatar>
+            <Text size="sm" fw={600} c={isDark ? theme.colors.gray[3] : theme.colors.gray[7]}>
+              AI Assistant
+            </Text>
+          </Group>
+          
+          {/* Progress percentage */}
+          <Badge variant="light" color="blue" size="sm">
+            {Math.round(progress)}%
+          </Badge>
         </Group>
-        <Group gap="xs" align="center">
+
+        {/* Status and progress details */}
+        <Group gap="xs" align="center" mb="sm">
           <Loader size="sm" color="blue" />
           <Text size="sm" c="dimmed" fw={500}>
-            Sedang berpikir...
+            {stage}
           </Text>
           <Box style={{ display: "flex", gap: "2px", marginLeft: "8px" }}>
             {[0, 1, 2].map((i) => (
@@ -857,6 +958,16 @@ export default function ChatPanel({
               />
             ))}
           </Box>
+        </Group>
+
+        {/* Time information */}
+        <Group justify="space-between" gap="xs">
+          <Text size="xs" c="dimmed">
+            Waktu berjalan: {timeElapsed}s
+          </Text>
+          <Text size="xs" c="dimmed">
+            Estimasi tersisa: {estimatedTimeRemaining}s
+          </Text>
         </Group>
       </Card>
     )

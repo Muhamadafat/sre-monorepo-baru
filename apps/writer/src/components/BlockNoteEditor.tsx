@@ -1156,7 +1156,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     const aiTemplates: AITemplate[] = [
       {
         title: "Buat Struktur ",
-        description: " Outline lengkap dengan heading dan sub-heading ",
+        description: " Outline lengkap dengan judul dan sub-judul ",
         type: "structure",
         color: "blue",
         icon: IconList,
@@ -1186,8 +1186,8 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     // AI Auto Templates - NEW: AI Otomatis tanpa prompt - FIXED with proper typing
     const aiAutoTemplates: AIAutoTemplate[] = [
       {
-        title: "Buat Struktur",
-        description: " Outline lengkap dengan heading dan sub-heading",
+        title: "Buat Struktur ",
+        description: " Outline lengkap dengan judul dan sub-judul",
         type: "structure",
         color: "blue",
         icon: IconList,
@@ -1657,6 +1657,53 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
 
       if (generatedText) {
         setGeneratedContent(generatedText);
+        
+        // ADD OUTLINE UPDATE - same as AI Modal
+        setTimeout(() => {
+          // Extract title dari H1 judul yang digenerate
+          const h1Match = generatedText.match(/^#\s+(.+)$/m);
+          if (h1Match) {
+            const extractedTitle = h1Match[1].trim();
+            console.log('🎯 AI AUTO - Dispatching title update:', extractedTitle);
+            
+            window.dispatchEvent(new CustomEvent('slashMenuTitleUpdate', { 
+              detail: { title: extractedTitle } 
+            }));
+          }
+
+          // DIRECT OUTLINE EXTRACTION dari generatedContent
+          console.log('🗂️ AI AUTO - Extracting judul directly from generated content');
+          const judul: { id: string; text: string; level: number }[] = [];
+          const lines = generatedText.split('\n');
+          
+          lines.forEach((line, index) => {
+            const judulMatch = line.match(/^(#{1,6})\s+(.+)$/);
+            if (judulMatch) {
+              const level = judulMatch[1].length;
+              const text = judulMatch[2].trim();
+              
+              judul.push({
+                id: `ai-auto-judul-${index}`,
+                text: text,
+                level: level
+              });
+            }
+          });
+          
+          console.log('🗂️ AI AUTO - Extracted judul directly:', judul);
+          
+          if (judul.length > 0) {
+            // Dispatch direct outline set
+            window.dispatchEvent(new CustomEvent('setOutlineDirectly', {
+              detail: { headings: judul }
+            }));
+          }
+
+          // Also force refresh outline as backup
+          console.log('🗂️ AI AUTO - Dispatching force outline refresh as backup');
+          window.dispatchEvent(new CustomEvent('forceOutlineRefresh'));
+        }, 2000); // Longer delay untuk pastikan content benar-benar terinser
+        
         openAIModal(); // Show modal with generated content
       }
     };
@@ -1943,7 +1990,7 @@ INSTRUKSI:
 - Jangan tulis ulang judul/heading
 - Mulai langsung dengan konten paragraf
 - Gunakan bahasa Indonesia yang natural dan informatif
-- Sesuaikan kedalaman konten dengan level heading
+- Sesuaikan kedalaman konten dengan level judul
 
 TUGAS: Tulis konten detail untuk heading "${targetHeading.text}"`;
                 }
@@ -1952,19 +1999,19 @@ TUGAS: Tulis konten detail untuk heading "${targetHeading.text}"`;
               case 'under_heading':
                 // This case is now only for EMPTY paragraphs directly under headings
                 if (targetHeading) {
-                  systemPrompt = `Tulis konten untuk heading berikut yang masih kosong:
+                  systemPrompt = `Tulis konten untuk judul berikut yang masih kosong:
 
-HEADING: ${targetHeading.text} (Level ${targetHeading.level})
+JUDUL: ${targetHeading.text} (Level ${targetHeading.level})
 
 KONTEKS DOKUMEN:
 ${precedingContext}
 
 INSTRUKSI:
-- Ini adalah paragraf kosong pertama di bawah heading "${targetHeading.text}"
-- Tulis 2-3 kalimat konten yang relevan untuk heading tersebut
+- Ini adalah paragraf kosong pertama di bawah judul "${targetHeading.text}"
+- Tulis 2-3 kalimat konten yang relevan untuk judul tersebut
 - Mulai langsung dengan konten paragraf yang informatif
 - Gunakan bahasa Indonesia yang natural dan professional
-- Sesuaikan kedalaman konten dengan level heading
+- Sesuaikan kedalaman konten dengan level judul
 
 TUGAS: Buat konten pembuka untuk "${targetHeading.text}"`;
                 }
@@ -2357,13 +2404,13 @@ ${contextContent}
 
 TUGAS ANDA:
 1. Analisis struktur dan konten yang sudah ada
-2. Identifikasi heading/subheading yang masih kosong atau perlu dilengkapi
+2. Identifikasi judul/subjudul yang masih kosong atau perlu dilengkapi
 3. Lanjutkan dengan menulis konten yang natural dan coherent
-4. Fokus pada heading yang belum memiliki konten atau konten yang masih singkat
+4. Fokus pada judul yang belum memiliki konten atau konten yang masih singkat
 
 INSTRUKSI PENULISAN:
-- Tulis konten dalam format yang sama (gunakan # ## ### untuk heading)
-- Setiap heading yang kosong atau singkat, isi dengan 2-3 paragraf detail
+- Tulis konten dalam format yang sama (gunakan # ## ### untuk judul)
+- Setiap judul yang kosong atau singkat, isi dengan 2-3 paragraf detail
 - Jaga konsistensi tone dan style dengan konten yang sudah ada
 - Berikan informasi yang valuable dan mendalam
 - Jangan mengulang informasi yang sudah ada
@@ -2383,14 +2430,14 @@ ATURAN STRUKTUR HEADING:
 - Gunakan #### untuk detail bagian (level 4)
 
 INSTRUKSI PENTING:
-- HANYA tulis heading dan subheading
+- HANYA tulis judul dan subjudul
 - JANGAN tulis konten paragraf apapun
 - TIDAK ada penjelasan atau deskripsi
 - Buat struktur yang komprehensif dan logis
 - Struktur ini akan mengganti semua konten yang ada
 
 TUGAS:
-Buat HANYA outline heading untuk "${prompt}" tanpa konten paragraf.`;
+Buat HANYA outline judul untuk "${prompt}" tanpa konten paragraf.`;
               break;
 
             case "content":
@@ -2429,24 +2476,24 @@ Buat HANYA outline heading untuk "${prompt}" tanpa konten paragraf.`;
                 }
               });
 
-              systemPrompt = `Buat konten detail untuk heading yang sedang aktif di cursor:
+              systemPrompt = `Buat konten detail untuk judul yang sedang aktif di cursor:
 
 STRUKTUR DOKUMEN SAAT INI:
 ${contentContext}
 
-HEADING YANG SEDANG AKTIF: ${currentHeading || "Heading Utama"}
+JUDUL YANG SEDANG AKTIF: ${currentHeading || "Judul Utama"}
 TOPIK KONTEN: ${prompt}
 
-INSTRUKSI UNTUK KONTEN DI HEADING INI:
-- Fokus pada heading "${currentHeading || "Heading Utama"}" yang sedang aktif
-- Tulis konten detail dan informatif tentang "${prompt}" yang relevan dengan heading tersebut
+INSTRUKSI UNTUK KONTEN DI JUDUL INI:
+- Fokus pada judul "${currentHeading || "Judul Utama"}" yang sedang aktif
+- Tulis konten detail dan informatif tentang "${prompt}" yang relevan dengan judul tersebut
 - Buat 2-4 paragraf konten yang mendalam
-- JANGAN tulis ulang heading atau struktur
-- HANYA tulis konten paragraf yang akan ditempatkan di bawah heading aktif
-- Pastikan konten sesuai dengan konteks dan level heading
+- JANGAN tulis ulang judul atau struktur
+- HANYA tulis konten paragraf yang akan ditempatkan di bawah judul aktif
+- Pastikan konten sesuai dengan konteks dan level judul
 
 TUGAS:
-Buat konten detail tentang "${prompt}" untuk heading "${currentHeading || "Heading Utama"}".`;
+Buat konten detail tentang "${prompt}" untuk judul "${currentHeading || "Judul Utama"}".`;
               break;
 
             case "sentence":
@@ -2940,7 +2987,7 @@ INSTRUKSI:
           icon: <IconPencilPlus size={18} />,
         },
         {
-          title: "AI tanpa Prompt (Otomatis)",
+          title: "Ai tanpa Prompt / Otomatis",
           onItemClick: () => {
             // Save precise cursor position when slash menu is clicked
             const cursorPosition = editor.getTextCursorPosition();
@@ -2956,7 +3003,7 @@ INSTRUKSI:
           },
           aliases: ["auto", "otomatis", "automatic", "smart", "cerdas", "instant", "langsung"],
           group: "AI Tools",
-          subtext: "Penyusunan otomatis struktur bab,isi konten, dan melanjutkan kalimat ",
+          subtext: "Penyusunan Konten tanpa prompt untuk struktur bab, isi konten, dan melanjutkan kalimat",
           icon: <IconSparkles size={18} />
         },
         // ############### PERBAIKAN LATEX DIMULAI DI SINI ###############
@@ -3021,6 +3068,7 @@ INSTRUKSI:
             subtext: "Gunakan untuk sub-bagian dari Heading 2",
           };
         }
+
 
         return item;
       });
@@ -3138,9 +3186,18 @@ INSTRUKSI:
 
     return (
       <>
-        <div style={{ position: 'relative', height: '100%', ...style }}>
+        <div style={{ 
+          position: 'relative', 
+          height: '100%', 
+          minWidth: '280px',
+          overflowX: 'hidden',
+          width: '100%',
+          maxWidth: '100%',
+          ...style 
+        }}>
           {/* Enhanced Modern Undo/Redo Controls */}
           <Paper
+            className="editor-toolbar"
             p="sm"
             mb="md"
             withBorder={false}
@@ -3154,9 +3211,11 @@ INSTRUKSI:
               boxShadow: computedColorScheme === "dark"
                 ? '0 8px 32px rgba(0, 0, 0, 0.3)'
                 : '0 8px 32px rgba(0, 0, 0, 0.1)',
+              flexShrink: 0,
+              overflowX: 'auto'
             }}
           >
-            <Group gap="sm" justify="space-between">
+            <Group gap="sm" justify="space-between" wrap="wrap" style={{ minWidth: 0 }}>
               <Group gap="xs">
                 <Tooltip
                   label={`Undo (Ctrl+Z)${canUndo() ? ` - ${undoRedoState.history.length - undoRedoState.currentIndex - 1} langkah tersedia` : ''}`}
@@ -3311,7 +3370,838 @@ INSTRUKSI:
             </Box>
           )}
 
-          <div style={{ height: '100%', overflow: 'auto' }}>
+          <div style={{ height: '100%', overflow: 'auto', position: 'relative' }}>
+            <style>{`
+              /* GLOBAL AGGRESSIVE RESPONSIVE FIXES */
+              
+              /* Prevent zoom on input focus (mobile) */
+              @media (max-width: 768px) {
+                input[type="text"],
+                input[type="email"], 
+                input[type="password"],
+                textarea,
+                select {
+                  font-size: 16px !important;
+                  transform: scale(1) !important;
+                }
+                
+                /* Fix entire layout structure */
+                .mantine-AppShell-root {
+                  display: flex !important;
+                  flex-direction: column !important;
+                }
+                
+                .mantine-AppShell-navbar {
+                  position: fixed !important;
+                  top: 0 !important;
+                  left: -280px !important;
+                  width: 280px !important;
+                  height: 100vh !important;
+                  z-index: 9999 !important;
+                  transition: left 0.3s ease !important;
+                  background: white !important;
+                  border-right: 1px solid #e9ecef !important;
+                }
+                
+                .mantine-AppShell-navbar[data-opened="true"] {
+                  left: 0 !important;
+                }
+                
+                .mantine-AppShell-main {
+                  padding: 8px !important;
+                  margin-left: 0 !important;
+                  width: 100% !important;
+                  max-width: 100vw !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .mantine-AppShell-aside {
+                  position: fixed !important;
+                  top: 0 !important;
+                  right: -100vw !important;
+                  width: 100vw !important;
+                  height: 100vh !important;
+                  z-index: 9998 !important;
+                  transition: right 0.3s ease !important;
+                  background: white !important;
+                  overflow-y: auto !important;
+                }
+                
+                .mantine-AppShell-aside[data-opened="true"] {
+                  right: 0 !important;
+                }
+                
+                /* Header responsive */
+                .mantine-AppShell-header {
+                  padding: 8px 16px !important;
+                }
+                
+                .mantine-AppShell-header .mantine-Group-root {
+                  gap: 8px !important;
+                }
+                
+                .mantine-AppShell-header .mantine-Text-root {
+                  font-size: 16px !important;
+                }
+              }
+              
+              @media (max-width: 480px) {
+                /* Extra mobile fixes */
+                .mantine-AppShell-navbar {
+                  width: 260px !important;
+                  left: -260px !important;
+                }
+                
+                .mantine-AppShell-main {
+                  padding: 4px !important;
+                }
+                
+                .mantine-AppShell-header {
+                  padding: 4px 8px !important;
+                }
+                
+                .mantine-AppShell-header .mantine-Text-root {
+                  font-size: 14px !important;
+                }
+                
+                .mantine-AppShell-header .mantine-ActionIcon-root {
+                  min-width: 36px !important;
+                  min-height: 36px !important;
+                }
+              }
+              
+              /* Touch-friendly improvements */
+              * {
+                -webkit-tap-highlight-color: rgba(59, 130, 246, 0.3) !important;
+                -webkit-touch-callout: none !important;
+              }
+              
+              /* Prevent horizontal scroll */
+              html, body {
+                overflow-x: hidden !important;
+                max-width: 100vw !important;
+              }
+              
+              /* Page layout improvements */
+              @media (max-width: 768px) {
+                /* Left sidebar improvements */
+                [data-testid="sidebar-left"],
+                .sidebar-left {
+                  position: fixed !important;
+                  top: 0 !important;
+                  left: -100% !important;
+                  width: 280px !important;
+                  height: 100vh !important;
+                  z-index: 9999 !important;
+                  transition: left 0.3s ease !important;
+                  background: rgba(255, 255, 255, 0.98) !important;
+                  backdrop-filter: blur(10px) !important;
+                  border-right: 2px solid rgba(59, 130, 246, 0.1) !important;
+                  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1) !important;
+                }
+                
+                [data-testid="sidebar-left"][data-opened="true"],
+                .sidebar-left.opened {
+                  left: 0 !important;
+                }
+                
+                /* Right panel improvements */
+                [data-testid="sidebar-right"],
+                .sidebar-right {
+                  position: fixed !important;
+                  top: 0 !important;
+                  right: -100% !important;
+                  width: 100vw !important;
+                  height: 100vh !important;
+                  z-index: 9998 !important;
+                  transition: right 0.3s ease !important;
+                  background: rgba(255, 255, 255, 0.98) !important;
+                  backdrop-filter: blur(10px) !important;
+                  border-left: 2px solid rgba(59, 130, 246, 0.1) !important;
+                  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1) !important;
+                  overflow-y: auto !important;
+                }
+                
+                [data-testid="sidebar-right"][data-opened="true"],
+                .sidebar-right.opened {
+                  right: 0 !important;
+                }
+                
+                /* Main content area */
+                .main-content,
+                [data-testid="main-content"] {
+                  width: 100% !important;
+                  max-width: 100vw !important;
+                  margin: 0 !important;
+                  padding: 8px !important;
+                  box-sizing: border-box !important;
+                }
+              }
+              
+              @media (max-width: 480px) {
+                /* Mobile specific adjustments */
+                [data-testid="sidebar-left"],
+                .sidebar-left {
+                  width: 260px !important;
+                }
+                
+                .main-content,
+                [data-testid="main-content"] {
+                  padding: 4px !important;
+                }
+              }
+              
+              /* Global Mobile-First Responsive Overrides */
+              @media (max-width: 768px) {
+                /* Cards and Papers - Mobile Optimized */
+                .mantine-Paper-root {
+                  margin: 2px !important;
+                  padding: 12px !important;
+                  border-radius: 12px !important;
+                  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+                }
+                
+                /* Reference cards in sidebar */
+                .mantine-Paper-root:has(.reference-item),
+                [data-testid*="reference"] .mantine-Paper-root {
+                  margin: 4px 8px !important;
+                  padding: 16px !important;
+                  min-height: 80px !important;
+                }
+                
+                /* Button improvements for mobile */
+                .mantine-Button-root {
+                  min-height: 48px !important;
+                  padding: 12px 20px !important;
+                  font-size: 14px !important;
+                  font-weight: 600 !important;
+                  border-radius: 12px !important;
+                  touch-action: manipulation !important;
+                }
+                
+                .mantine-ActionIcon-root {
+                  min-width: 48px !important;
+                  min-height: 48px !important;
+                  border-radius: 12px !important;
+                  touch-action: manipulation !important;
+                }
+                
+                /* Text improvements */
+                .mantine-Text-root {
+                  font-size: 14px !important;
+                  line-height: 1.5 !important;
+                }
+                
+                .mantine-Title-root {
+                  font-size: 18px !important;
+                  line-height: 1.3 !important;
+                }
+                
+                /* Input and form improvements */
+                .mantine-Input-root,
+                .mantine-Textarea-root {
+                  min-height: 48px !important;
+                  font-size: 16px !important;
+                  border-radius: 12px !important;
+                }
+                
+                .mantine-TextInput-input,
+                .mantine-Textarea-input {
+                  padding: 12px 16px !important;
+                }
+                
+                /* Search input specific */
+                .mantine-Spotlight-root,
+                [data-testid*="search"] input {
+                  font-size: 16px !important;
+                  min-height: 48px !important;
+                  padding: 12px 16px !important;
+                }
+                
+                /* Group and Stack spacing */
+                .mantine-Group-root {
+                  gap: 12px !important;
+                  flex-wrap: wrap !important;
+                }
+                
+                .mantine-Stack-root {
+                  gap: 12px !important;
+                }
+                
+                /* Editor toolbar specific */
+                .editor-toolbar .mantine-Group-root {
+                  gap: 8px !important;
+                  flex-direction: row !important;
+                  justify-content: space-between !important;
+                  align-items: center !important;
+                }
+                
+                .editor-toolbar .mantine-Group-root > .mantine-Group-root {
+                  justify-content: center !important;
+                  flex-wrap: wrap !important;
+                  gap: 8px !important;
+                }
+                
+                /* Modal improvements */
+                .mantine-Modal-root {
+                  padding: 16px !important;
+                }
+                
+                .mantine-Modal-content {
+                  max-height: calc(100vh - 32px) !important;
+                  margin: 0 !important;
+                  border-radius: 16px !important;
+                  max-width: calc(100vw - 32px) !important;
+                }
+                
+                .mantine-Modal-body {
+                  padding: 20px !important;
+                }
+                
+                .mantine-Modal-header {
+                  padding: 16px 20px !important;
+                  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+                }
+                
+                /* Drawer improvements for sidebars */
+                .mantine-Drawer-content {
+                  border-radius: 0 !important;
+                }
+                
+                .mantine-Drawer-body {
+                  padding: 16px !important;
+                }
+                
+                .mantine-Drawer-header {
+                  padding: 16px !important;
+                  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+                }
+              }
+              
+              @media (max-width: 480px) {
+                /* Extra aggressive mobile styling */
+                body {
+                  overflow-x: hidden !important;
+                }
+                
+                .mantine-AppShell-root {
+                  min-width: 100vw !important;
+                  overflow-x: hidden !important;
+                }
+                
+                /* Mobile optimized cards */
+                .mantine-Paper-root {
+                  margin: 4px !important;
+                  padding: 12px !important;
+                  border-radius: 10px !important;
+                  min-height: 60px !important;
+                }
+                
+                /* Outline Article card specific */
+                .mantine-Paper-root:has([data-testid*="outline"]),
+                .outline-card {
+                  margin: 8px !important;
+                  padding: 16px !important;
+                  min-height: 100px !important;
+                  border: 2px solid rgba(59, 130, 246, 0.2) !important;
+                  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(147, 197, 253, 0.05)) !important;
+                }
+                
+                /* Reference cards */
+                .reference-card,
+                [data-testid*="reference"] {
+                  margin: 6px 4px !important;
+                  padding: 12px !important;
+                  min-height: 70px !important;
+                  border-left: 4px solid #3b82f6 !important;
+                }
+                
+                .mantine-Button-root {
+                  min-height: 44px !important;
+                  padding: 10px 16px !important;
+                  font-size: 14px !important;
+                  font-weight: 600 !important;
+                  border-radius: 10px !important;
+                }
+                
+                .mantine-ActionIcon-root {
+                  min-width: 44px !important;
+                  min-height: 44px !important;
+                  border-radius: 10px !important;
+                }
+                
+                /* Text sizing for mobile */
+                .mantine-Text-root {
+                  font-size: 13px !important;
+                  line-height: 1.4 !important;
+                }
+                
+                .mantine-Title-root {
+                  font-size: 16px !important;
+                  line-height: 1.3 !important;
+                }
+                
+                /* Mobile input improvements */
+                .mantine-Input-root,
+                .mantine-Textarea-root {
+                  min-height: 44px !important;
+                  font-size: 16px !important;
+                  border-radius: 10px !important;
+                }
+                
+                .mantine-TextInput-input,
+                .mantine-Textarea-input {
+                  padding: 10px 14px !important;
+                }
+                
+                /* Search input */
+                .mantine-Spotlight-root,
+                [data-testid*="search"] input {
+                  font-size: 16px !important;
+                  min-height: 44px !important;
+                  padding: 10px 14px !important;
+                  border-radius: 10px !important;
+                }
+                
+                /* Spacing adjustments */
+                .mantine-Group-root {
+                  gap: 8px !important;
+                }
+                
+                .mantine-Stack-root {
+                  gap: 8px !important;
+                }
+                
+                /* Modal mobile */
+                .mantine-Modal-content {
+                  width: 100vw !important;
+                  height: 100vh !important;
+                  max-width: none !important;
+                  max-height: none !important;
+                  margin: 0 !important;
+                  border-radius: 0 !important;
+                }
+                
+                .mantine-Modal-body {
+                  padding: 16px !important;
+                  max-height: calc(100vh - 60px) !important;
+                  overflow-y: auto !important;
+                }
+                
+                .mantine-Modal-header {
+                  padding: 12px 16px !important;
+                  flex-shrink: 0 !important;
+                }
+                
+                /* Tooltip mobile */
+                .mantine-Tooltip-tooltip {
+                  font-size: 11px !important;
+                  padding: 6px 10px !important;
+                  max-width: 250px !important;
+                  border-radius: 8px !important;
+                }
+                
+                /* Save buttons at bottom */
+                .save-buttons,
+                [data-testid*="save"] {
+                  position: sticky !important;
+                  bottom: 0 !important;
+                  background: rgba(255, 255, 255, 0.95) !important;
+                  backdrop-filter: blur(10px) !important;
+                  padding: 12px !important;
+                  border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+                  z-index: 100 !important;
+                }
+              }
+              
+              /* BlockNote Editor Mobile Responsive Overrides */
+              .ProseMirror {
+                font-size: 16px !important;
+                line-height: 1.6 !important;
+                padding: 16px !important;
+              }
+              
+              @media (max-width: 768px) {
+                .ProseMirror {
+                  font-size: 15px !important;
+                  padding: 12px !important;
+                }
+              }
+              
+              @media (max-width: 480px) {
+                .ProseMirror {
+                  font-size: 14px !important;
+                  padding: 8px !important;
+                  min-height: 200px !important;
+                }
+              }
+              
+              /* AI Modal Mobile Responsive */
+              @media (max-width: 768px) {
+                .mantine-Modal-content {
+                  width: calc(100vw - 16px) !important;
+                  max-width: none !important;
+                  margin: 8px !important;
+                  max-height: calc(100vh - 16px) !important;
+                }
+                
+                .mantine-Modal-body {
+                  padding: 12px !important;
+                  max-height: calc(100vh - 120px) !important;
+                  overflow-y: auto !important;
+                }
+                
+                .mantine-Modal-header {
+                  padding: 12px !important;
+                  flex-shrink: 0 !important;
+                }
+              }
+              
+              @media (max-width: 480px) {
+                .mantine-Modal-content {
+                  width: 100vw !important;
+                  height: 100vh !important;
+                  margin: 0 !important;
+                  border-radius: 0 !important;
+                }
+                
+                .mantine-Modal-body {
+                  padding: 8px !important;
+                  max-height: calc(100vh - 80px) !important;
+                }
+                
+                .mantine-Modal-header {
+                  padding: 8px !important;
+                }
+              }
+              
+              /* Try targeting ALL possible floating elements */
+              * {
+                --bn-formatting-toolbar-padding: 2px 4px !important;
+              }
+              
+              /* Ultra-wide targeting approach */
+              div[style*="position: absolute"],
+              div[style*="position: fixed"],
+              [data-radix-popper-content-wrapper],
+              .mantine-Popover-dropdown,
+              .mantine-Paper-root[style*="background"],
+              [role="dialog"],
+              [role="tooltip"],
+              [role="toolbar"] {
+                padding: var(--bn-formatting-toolbar-padding) !important;
+                border-radius: 8px !important;
+              }
+              
+              /* Brute force all buttons in floating elements */
+              div[style*="position: absolute"] button,
+              div[style*="position: fixed"] button,
+              [data-radix-popper-content-wrapper] button,
+              .mantine-Popover-dropdown button,
+              .mantine-Paper-root button,
+              [role="dialog"] button,
+              [role="tooltip"] button,
+              [role="toolbar"] button {
+                margin: 0 1px !important;
+                min-width: 32px !important;
+                height: 32px !important;
+              }
+              
+              /* RESPONSIVE Slash Menu Styling - Fixed Size */
+              .bn-suggestion-menu {
+                position: absolute !important;
+                max-width: 650px !important;
+                width: auto !important;
+                min-width: 580px !important;
+                max-height: 400px !important;
+                overflow-y: auto !important;
+                border-radius: 12px !important;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+                backdrop-filter: blur(12px) !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                z-index: 1000 !important;
+                padding: 4px 8px 4px 4px !important;
+              }
+              
+              .bn-suggestion-menu::-webkit-scrollbar {
+                width: 6px !important;
+              }
+              
+              .bn-suggestion-menu::-webkit-scrollbar-track {
+                background: rgba(0, 0, 0, 0.1) !important;
+                border-radius: 3px !important;
+              }
+              
+              .bn-suggestion-menu::-webkit-scrollbar-thumb {
+                background: rgba(0, 0, 0, 0.3) !important;
+                border-radius: 3px !important;
+              }
+              
+              .bn-suggestion-menu::-webkit-scrollbar-thumb:hover {
+                background: rgba(0, 0, 0, 0.5) !important;
+              }
+              
+              .bn-suggestion-menu-item {
+                padding: 10px 16px 10px 14px !important;
+                margin: 1px 2px !important;
+                border-radius: 8px !important;
+                transition: all 0.2s ease !important;
+                cursor: pointer !important;
+                display: flex !important;
+                align-items: center !important;
+                gap: 12px !important;
+                min-height: auto !important;
+                touch-action: manipulation !important;
+              }
+              
+              .bn-suggestion-menu-item:hover,
+              .bn-suggestion-menu-item:active {
+                transform: none !important;
+                box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2) !important;
+                background: rgba(59, 130, 246, 0.08) !important;
+              }
+              
+              .bn-suggestion-menu-item-icon {
+                flex-shrink: 0 !important;
+                width: 20px !important;
+                height: 20px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                background: rgba(59, 130, 246, 0.1) !important;
+                border-radius: 6px !important;
+                padding: 2px !important;
+              }
+              
+              .bn-suggestion-menu-item-content {
+                flex: 1 !important;
+                min-width: 0 !important;
+                max-width: calc(100% - 60px) !important;
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 4px !important;
+              }
+              
+              .bn-suggestion-menu-item-title {
+                font-size: 14px !important;
+                font-weight: 600 !important;
+                color: inherit !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                line-height: 1.3 !important;
+                margin: 0 !important;
+              }
+              
+              .bn-suggestion-menu-item-subtitle {
+                font-size: 12px !important;
+                opacity: 0.7 !important;
+                line-height: 1.4 !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                margin: 0 !important;
+              }
+              
+              .bn-suggestion-menu-group-label {
+                font-size: 11px !important;
+                font-weight: 700 !important;
+                text-transform: uppercase !important;
+                letter-spacing: 0.5px !important;
+                padding: 8px 16px 6px 16px !important;
+                margin: 2px 2px 0px 2px !important;
+                opacity: 0.6 !important;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+                background: transparent !important;
+              }
+              
+              .bn-suggestion-menu-group-label:first-child {
+                margin-top: 2px !important;
+              }
+              
+              /* Tablet Responsive (768px and down) */
+              @media (max-width: 768px) {
+                .bn-suggestion-menu {
+                  max-width: calc(100vw - 32px) !important;
+                  min-width: 280px !important;
+                  max-height: 350px !important;
+                }
+                
+                .bn-suggestion-menu-item {
+                  padding: 10px 20px 10px 14px !important;
+                  gap: 10px !important;
+                }
+                
+                .bn-suggestion-menu-item-icon {
+                  width: 18px !important;
+                  height: 18px !important;
+                }
+                
+                .bn-suggestion-menu-item-title {
+                  font-size: 13px !important;
+                }
+                
+                .bn-suggestion-menu-item-subtitle {
+                  font-size: 11px !important;
+                }
+              }
+              
+              /* Mobile Responsive (480px and down) */
+              @media (max-width: 480px) {
+                .bn-suggestion-menu {
+                  max-width: calc(100vw - 16px) !important;
+                  min-width: 260px !important;
+                  max-height: 300px !important;
+                }
+                
+                .bn-suggestion-menu-item {
+                  padding: 8px 18px 8px 12px !important;
+                  gap: 8px !important;
+                  margin: 1px 2px !important;
+                }
+                
+                .bn-suggestion-menu-item-icon {
+                  width: 16px !important;
+                  height: 16px !important;
+                }
+                
+                .bn-suggestion-menu-item-title {
+                  font-size: 13px !important;
+                  font-weight: 600 !important;
+                }
+                
+                .bn-suggestion-menu-item-subtitle {
+                  font-size: 10px !important;
+                  line-height: 1.3 !important;
+                }
+                
+                .bn-suggestion-menu-group-label {
+                  padding: 8px 12px 4px 12px !important;
+                  font-size: 9px !important;
+                }
+              }
+              
+              /* Extra Small Mobile (360px and down) */
+              @media (max-width: 360px) {
+                .bn-suggestion-menu {
+                  max-width: calc(100vw - 8px) !important;
+                  min-width: 240px !important;
+                }
+                
+                .bn-suggestion-menu-item {
+                  padding: 6px 16px 6px 10px !important;
+                  gap: 6px !important;
+                }
+                
+                .bn-suggestion-menu-item-icon {
+                  width: 14px !important;
+                  height: 14px !important;
+                }
+                
+                .bn-suggestion-menu-item-title {
+                  font-size: 12px !important;
+                }
+                
+                .bn-suggestion-menu-item-subtitle {
+                  font-size: 9px !important;
+                }
+              }
+              
+              /* Dark Mode Support for All Components */
+              [data-mantine-color-scheme="dark"] {
+                /* AppShell dark mode */
+                .mantine-AppShell-navbar {
+                  background: rgba(16, 18, 22, 0.98) !important;
+                  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+                }
+                
+                .mantine-AppShell-aside {
+                  background: rgba(16, 18, 22, 0.98) !important;
+                  border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+                }
+                
+                /* Papers and cards dark mode */
+                .mantine-Paper-root {
+                  background: rgba(26, 27, 30, 0.8) !important;
+                  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                }
+                
+                /* Outline card dark mode */
+                .outline-card,
+                .mantine-Paper-root:has([data-testid*="outline"]) {
+                  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 197, 253, 0.1)) !important;
+                  border: 2px solid rgba(59, 130, 246, 0.3) !important;
+                }
+                
+                /* Reference cards dark mode */
+                .reference-card,
+                [data-testid*="reference"] {
+                  border-left-color: #60a5fa !important;
+                  background: rgba(30, 32, 36, 0.8) !important;
+                }
+              }
+              
+              /* Dark mode slash menu */
+              [data-mantine-color-scheme="dark"] .bn-suggestion-menu {
+                background: rgba(16, 18, 22, 0.98) !important;
+                border: 2px solid rgba(255, 255, 255, 0.15) !important;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6) !important;
+              }
+              
+              [data-mantine-color-scheme="dark"] .bn-suggestion-menu-item:hover,
+              [data-mantine-color-scheme="dark"] .bn-suggestion-menu-item:active {
+                background: rgba(59, 130, 246, 0.15) !important;
+              }
+              
+              [data-mantine-color-scheme="dark"] .bn-suggestion-menu-item-icon {
+                background: rgba(59, 130, 246, 0.2) !important;
+              }
+              
+              [data-mantine-color-scheme="dark"] .bn-suggestion-menu-group-label {
+                border-bottom-color: rgba(255, 255, 255, 0.15) !important;
+                background: rgba(255, 255, 255, 0.05) !important;
+              }
+              
+              /* Mobile menu animations and transitions */
+              @media (max-width: 768px) {
+                .sidebar-overlay {
+                  position: fixed !important;
+                  top: 0 !important;
+                  left: 0 !important;
+                  width: 100vw !important;
+                  height: 100vh !important;
+                  background: rgba(0, 0, 0, 0.5) !important;
+                  z-index: 9997 !important;
+                  opacity: 0 !important;
+                  visibility: hidden !important;
+                  transition: all 0.3s ease !important;
+                  backdrop-filter: blur(4px) !important;
+                }
+                
+                .sidebar-overlay.active {
+                  opacity: 1 !important;
+                  visibility: visible !important;
+                }
+                
+                /* Enhanced mobile animations */
+                .mantine-AppShell-navbar,
+                .mantine-AppShell-aside,
+                [data-testid="sidebar-left"],
+                [data-testid="sidebar-right"] {
+                  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                }
+                
+                /* Smooth scroll for mobile */
+                .mantine-AppShell-aside {
+                  -webkit-overflow-scrolling: touch !important;
+                  scrollbar-width: none !important;
+                }
+                
+                .mantine-AppShell-aside::-webkit-scrollbar {
+                  display: none !important;
+                }
+              }
+            `}</style>
             <BlockNoteView
               editor={editor}
               slashMenu={false}
@@ -3937,7 +4827,7 @@ INSTRUKSI:
                         </Text>
                       </Group>
                       <Text size="sm" c="blue">
-                        AI akan menganalisis heading/subheading di editor dan melengkapi konten yang masih kosong atau singkat.
+                        AI akan menganalisis judul/subjudul di editor dan melengkapi konten yang masih kosong atau singkat.
                       </Text>
                     </Stack>
                   </Paper>
@@ -3954,7 +4844,7 @@ INSTRUKSI:
                       if (aiMode === "continue") {
                         return [{
                           title: "Lanjutkan Konten",
-                          description: "AI akan melengkapi heading yang masih kosong dengan konten detail",
+                          description: "AI akan melengkapi judul yang masih kosong dengan konten detail",
                           type: "content",
                           color: "green",
                           icon: IconEdit,

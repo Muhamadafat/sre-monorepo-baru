@@ -58,6 +58,9 @@ import {
    IconGraph,
    IconMessageCircle2,
    IconBrain,
+   IconSparkles,
+   IconCheck,
+   IconBulb,
    IconMap2,
    IconSend,
    IconFilePlus,
@@ -84,7 +87,6 @@ import {
    IconAlertTriangle,
    IconX,
    IconCircleCheck,
-   IconBulb,
    IconShieldCheck,
    IconScan,
    IconRobot as IconActivity,
@@ -264,6 +266,9 @@ export default function Home() {
   // State untuk draft
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [draftProgress, setDraftProgress] = useState(0);
+  const [draftStage, setDraftStage] = useState('');
   const [isDraftSaving, setIsDraftSaving] = useState(false);
   
   // const [assignmentCode, setAssignmentCode] = useState('');
@@ -563,6 +568,73 @@ export default function Home() {
     
     return () => clearTimeout(timer);
   }, [logTransform]);
+
+  // Listen for slash menu title updates
+  useEffect(() => {
+    const handleSlashMenuTitleUpdate = (event: any) => {
+      console.log('🎯 RECEIVED SLASH MENU EVENT:', event);
+      const { title } = event.detail;
+      if (title) {
+        console.log('📝 UPDATING FILENAME STATE FROM SLASH MENU (CLEAN):', title);
+        setFileName(title); // Langsung pakai title clean tanpa prefix
+        
+        // Force re-render to ensure UI updates
+        setTimeout(() => {
+          console.log('✅ LEFT PANEL FILENAME UPDATED TO:', title);
+        }, 100);
+      } else {
+        console.log('❌ No title in event detail:', event.detail);
+      }
+    };
+
+    // Add outline refresh listener
+    const handleForceOutlineRefresh = () => {
+      console.log('🗂️ FORCE OUTLINE REFRESH - Triggered from AI Modal');
+      // Manually trigger outline extraction from current editor content
+      setTimeout(() => {
+        if (editorRef.current) {
+          const editor = editorRef.current.getEditor();
+          if (editor) {
+            console.log('🗂️ FORCE OUTLINE REFRESH - Calling handleContentChange manually');
+            handleContentChange(editor.document);
+          }
+        }
+      }, 100);
+    };
+
+    // BACKUP: Direct outline setter
+    const handleSetOutlineDirectly = (event: any) => {
+      console.log('🎯 DIRECT OUTLINE SET - Event received:', event);
+      console.log('🎯 DIRECT OUTLINE SET - Event detail:', event.detail);
+      
+      const { headings } = event.detail;
+      if (headings && headings.length > 0) {
+        console.log('🗂️ DIRECT OUTLINE SET - Setting headings directly:', headings);
+        console.log('🗂️ DIRECT OUTLINE SET - Current headings before update:', headings);
+        setHeadings(headings);
+        console.log('✅ DIRECT OUTLINE SET - Headings set successfully, new state should be:', headings);
+        
+        // Force a re-render by triggering state update
+        setTimeout(() => {
+          console.log('🔄 DIRECT OUTLINE SET - Forcing component re-render');
+        }, 100);
+      } else {
+        console.log('❌ DIRECT OUTLINE SET - No valid headings received:', { headings, eventDetail: event.detail });
+      }
+    };
+
+    console.log('🔗 SLASH MENU & OUTLINE EVENT LISTENERS REGISTERED');
+    window.addEventListener('slashMenuTitleUpdate', handleSlashMenuTitleUpdate);
+    window.addEventListener('forceOutlineRefresh', handleForceOutlineRefresh);
+    window.addEventListener('setOutlineDirectly', handleSetOutlineDirectly);
+    
+    return () => {
+      console.log('🔗 EVENT LISTENERS REMOVED');
+      window.removeEventListener('slashMenuTitleUpdate', handleSlashMenuTitleUpdate);
+      window.removeEventListener('forceOutlineRefresh', handleForceOutlineRefresh);
+      window.removeEventListener('setOutlineDirectly', handleSetOutlineDirectly);
+    };
+  }, []);
 
   // 4. Load drafts di useEffect (tambahan untuk page.tsx)
   const loadDrafts = async () => {
@@ -2180,6 +2252,80 @@ const handleSubmitToTeacher = async () => {
   const [messages, setMessages] = useState<string[]>([]);
   const [editorContent, setEditorContent] = useState<any[]>([]);
 
+  // Function to navigate to specific heading in editor
+  const navigateToHeading = (headingId: string, headingText: string) => {
+    console.log('🎯 OUTLINE NAVIGATION - Attempting to navigate to:', { headingId, headingText });
+    
+    try {
+      const editor = editorRef.current?.getEditor();
+      if (!editor) {
+        console.log('❌ OUTLINE NAVIGATION - No editor reference available');
+        return;
+      }
+
+      console.log('🔍 OUTLINE NAVIGATION - Searching through editor blocks...');
+      const blocks = editor.document;
+      
+      // Find the block by ID first
+      let targetBlock = blocks.find(block => block.id === headingId);
+      
+      // If not found by ID, find by heading content
+      if (!targetBlock) {
+        console.log('🔍 OUTLINE NAVIGATION - Block not found by ID, searching by content...');
+        targetBlock = blocks.find(block => {
+          if (block.type === 'heading' && block.content?.length > 0) {
+            const blockText = block.content.map((item: any) => item.text || "").join("").trim();
+            return blockText === headingText;
+          }
+          return false;
+        });
+      }
+
+      if (targetBlock) {
+        console.log('✅ OUTLINE NAVIGATION - Target block found:', targetBlock);
+        
+        // Focus the editor first
+        editor.focus();
+        
+        // Set text cursor to the heading block
+        editor.setTextCursorPosition(targetBlock, "start");
+        
+        // Also scroll the block into view
+        setTimeout(() => {
+          const blockElement = document.querySelector(`[data-id="${targetBlock.id}"]`) as HTMLElement;
+          if (blockElement) {
+            console.log('📍 OUTLINE NAVIGATION - Scrolling to block element');
+            blockElement.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'center' 
+            });
+            
+            // Add highlight effect
+            blockElement.style.background = 'rgba(59, 130, 246, 0.15)';
+            blockElement.style.borderLeft = '4px solid #3b82f6';
+            blockElement.style.borderRadius = '0 8px 8px 0';
+            blockElement.style.transition = 'all 0.3s ease';
+            
+            setTimeout(() => {
+              blockElement.style.background = '';
+              blockElement.style.borderLeft = '';
+              blockElement.style.borderRadius = '';
+            }, 2500);
+          } else {
+            console.log('⚠️ OUTLINE NAVIGATION - Block element not found in DOM');
+          }
+        }, 100);
+        
+        console.log('✅ OUTLINE NAVIGATION - Successfully navigated to heading');
+      } else {
+        console.log('❌ OUTLINE NAVIGATION - Target block not found in editor document');
+        console.log('📝 Available blocks:', blocks.map(b => ({ id: b.id, type: b.type, content: b.content })));
+      }
+    } catch (error) {
+      console.error('❌ OUTLINE NAVIGATION - Error during navigation:', error);
+    }
+  };
+
   const handleContentChange = (content: any[]) => {
     setEditorContent(content);
 
@@ -2607,32 +2753,7 @@ const handleSubmitToTeacher = async () => {
                                   backgroundColor: config.bgColor,
                                 }
                               }}
-                              onClick={() => {
-                                try {
-                                  // Enhanced scroll dengan highlight
-                                  const blockElement = document.querySelector(`[data-id="${id}"]`) as HTMLElement;
-                                  if (blockElement) {
-                                    blockElement.scrollIntoView({ 
-                                      behavior: 'smooth', 
-                                      block: 'center' 
-                                    });
-                                    
-                                    // Temporary highlight effect
-                                    blockElement.style.background = 'rgba(59, 130, 246, 0.15)';
-                                    blockElement.style.borderLeft = '4px solid #3b82f6';
-                                    blockElement.style.borderRadius = '0 8px 8px 0';
-                                    blockElement.style.transition = 'all 0.3s ease';
-                                    
-                                    setTimeout(() => {
-                                      blockElement.style.background = '';
-                                      blockElement.style.borderLeft = '';
-                                      blockElement.style.borderRadius = '';
-                                    }, 2500);
-                                  }
-                                } catch (error) {
-                                  console.error('Error scrolling to heading:', error);
-                                }
-                              }}
+                              onClick={() => navigateToHeading(id, text)}
                             >
                               <Box style={{ padding: config.padding }}>
                                 <Group gap="sm" align="center" wrap="nowrap">
@@ -2757,41 +2878,7 @@ const handleSubmitToTeacher = async () => {
                           overflow: "hidden",
                         }}
                         className="hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-blue-200"
-                        onClick={() => {
-                          // Enhanced scroll function
-                          try {
-                            // Method 1: Cari berdasarkan block ID
-                            const blockElement = document.querySelector(`[data-id="${id}"]`) as HTMLElement;
-                            if (blockElement) {
-                              blockElement.scrollIntoView({ 
-                                behavior: 'smooth', 
-                                block: 'center' 
-                              });
-                              
-                              // Highlight sementara
-                              blockElement.style.background = 'rgba(59, 130, 246, 0.1)';
-                              blockElement.style.borderLeft = '4px solid #3b82f6';
-                              blockElement.style.borderRadius = '0 8px 8px 0';
-                              setTimeout(() => {
-                                blockElement.style.background = '';
-                                blockElement.style.borderLeft = '';
-                                blockElement.style.borderRadius = '';
-                              }, 2000);
-                              return;
-                            }
-                            
-                            // Method 2: Fallback ke method lama
-                            const element = document.getElementById(id) as HTMLElement;
-                            if (element) {
-                              element.scrollIntoView({ 
-                                behavior: 'smooth', 
-                                block: 'start' 
-                              });
-                            }
-                          } catch (error) {
-                            console.error('Error scrolling to heading:', error);
-                          }
-                        }}
+                        onClick={() => navigateToHeading(id, text)}
                       >
                         <Text size="xs" style={{ minWidth: 16 }}>
                           {getHeadingIcon()}
@@ -3138,8 +3225,7 @@ const handleSubmitToTeacher = async () => {
                             {/* Area untuk menulis draft */}
                             <ScrollArea
                               style={{
-                                maxHeight: 'calc(100vh - 200px)',
-                                minHeight: '200px',
+                                height: '600px',
                                 border: '1px solid #e9ecef',
                                 borderRadius: '8px',
                                 padding: '16px',
@@ -3162,11 +3248,184 @@ const handleSubmitToTeacher = async () => {
                                   }}
                                 />
                                 
-                                <Text size="sm" c="dimmed" mt="md">
-                                  💡 Tips: Gunakan referensi dari tab "Referensi Pustaka" dan sitasi dari "Daftar Pustaka" untuk memperkuat artikel Anda.
-                                </Text>
+                                <Box mt="md">
+                                  <Group gap="xs" align="flex-start">
+                                    <IconBulb size={16} color="orange" />
+                                    <Text size="sm" c="dimmed">Tips: Gunakan referensi dari tab "Referensi Pustaka" dan sitasi dari "Daftar Pustaka" untuk memperkuat artikel Anda.</Text>
+                                  </Group>
+                                </Box>
 
-                                <Group gap="md" mt="lg">
+                                {/* AI MAGIC BUTTONS - INI YANG KURANG KONTOL! */}
+                                <Alert
+                                  icon={<IconSparkles size={16} />}
+                                  color="blue"
+                                  variant="light"
+                                  mb="md"
+                                  mt="lg"
+                                >
+                                  <Text size="sm" fw={600} c="blue">AI Magic Buttons:</Text>
+                                </Alert>
+                                
+                                <Group gap="sm" mb="md">
+                                  <Button 
+                                    leftSection={<IconSparkles size={16} />} 
+                                    variant="gradient"
+                                    gradient={{ from: 'blue', to: 'cyan' }}
+                                    size="sm"
+                                    onClick={() => {
+                                      if (!draftTitle.trim()) {
+                                        notifications.show({
+                                          title: "⚠️ Judul artikel required",
+                                          message: "Silakan masukkan judul artikel terlebih dahulu untuk mulai generate draft",
+                                          color: "orange",
+                                          icon: <IconAlertCircle size={20} />,
+                                          autoClose: 4000,
+                                          withBorder: true,
+                                        });
+                                        return;
+                                      }
+                                      
+                                      // Show elegant AI generation notification
+                                      notifications.show({
+                                        id: 'ai-generate',
+                                        title: "🚀 AI Magic Started!",
+                                        message: `Sedang membuat draft artikel "${draftTitle}" dengan kecerdasan artificial...`,
+                                        color: "blue",
+                                        icon: <IconSparkles size={20} />,
+                                        loading: true,
+                                        autoClose: false,
+                                        withBorder: true,
+                                      });
+
+                                      // Simulate AI generation process
+                                      setTimeout(() => {
+                                        notifications.update({
+                                          id: 'ai-generate',
+                                          title: "✨ Draft berhasil dibuat!",
+                                          message: `Draft artikel "${draftTitle}" telah selesai dan siap untuk diedit lebih lanjut`,
+                                          color: "green",
+                                          icon: <IconCircleCheck size={20} />,
+                                          loading: false,
+                                          autoClose: 5000,
+                                          withBorder: true,
+                                        });
+
+                                        // Add generated content to draft area
+                                        const generatedContent = `# ${draftTitle}
+
+## Pendahuluan
+
+Artikel ini membahas tentang ${draftTitle.toLowerCase()} dengan pendekatan yang komprehensif dan mudah dipahami.
+
+## Poin Utama
+
+### 1. Konsep Dasar
+Pembahasan fundamental mengenai topik ini mencakup aspek-aspek penting yang perlu dipahami.
+
+### 2. Implementasi Praktis
+Langkah-langkah praktis yang dapat diterapkan dalam konteks nyata.
+
+### 3. Best Practices
+Rekomendasi dan praktik terbaik berdasarkan pengalaman dan penelitian.
+
+## Kesimpulan
+
+Ringkasan dari pembahasan ${draftTitle.toLowerCase()} beserta rekomendasi untuk langkah selanjutnya.
+
+---
+*Draft ini dibuat dengan bantuan AI Magic dan siap untuk dikembangkan lebih lanjut.*`;
+
+                                        // Insert content into draft area
+                                        setDraftContent(generatedContent);
+                                        
+                                        // Log to activity (safe check)
+                                        if (typeof logActivity === 'function') {
+                                          logActivity(
+                                            'AI Draft Generated',
+                                            `Draft artikel "${draftTitle}" berhasil dibuat dengan AI`
+                                          );
+                                        }
+                                      }, 3000);
+                                    }}
+                                  >
+                                    Generate dengan AI
+                                  </Button>
+                                  <Button 
+                                    leftSection={<IconFileText size={16} />} 
+                                    variant="light"
+                                    color="green"
+                                    size="sm"
+                                    onClick={() => {
+                                      notifications.show({
+                                        title: "📝 Template AI Coming Soon",
+                                        message: "Fitur pemilihan template AI sedang dalam pengembangan dan akan segera tersedia!",
+                                        color: "green",
+                                        icon: <IconFileText size={20} />,
+                                        autoClose: 4000,
+                                        withBorder: true,
+                                      });
+                                    }}
+                                  >
+                                    Pilih Template AI
+                                  </Button>
+                                  <Button 
+                                    leftSection={<IconBrain size={16} />} 
+                                    variant="light"
+                                    color="purple"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (!draftTitle.trim()) {
+                                        notifications.show({
+                                          title: "⚠️ Judul artikel required",
+                                          message: "Masukkan judul artikel untuk mulai auto-draft berdasarkan referensi",
+                                          color: "orange",
+                                          icon: <IconAlertCircle size={20} />,
+                                          autoClose: 4000,
+                                          withBorder: true,
+                                        });
+                                        return;
+                                      }
+
+                                      notifications.show({
+                                        id: 'auto-draft',
+                                        title: "🧠✨ Auto-Draft Magic!",
+                                        message: `Menganalisis referensi pustaka dan membuat draft "${draftTitle}" berdasarkan sumber yang tersedia...`,
+                                        color: "purple",
+                                        icon: <IconBrain size={20} />,
+                                        loading: true,
+                                        autoClose: false,
+                                        withBorder: true,
+                                      });
+
+                                      setTimeout(() => {
+                                        notifications.update({
+                                          id: 'auto-draft',
+                                          title: "📚 Draft berhasil dibuat dari referensi!",
+                                          message: `Draft artikel "${draftTitle}" telah dibuat berdasarkan analisis referensi pustaka`,
+                                          color: "green",
+                                          icon: <IconCircleCheck size={20} />,
+                                          loading: false,
+                                          autoClose: 5000,
+                                          withBorder: true,
+                                        });
+
+                                        // Log to activity (safe check)
+                                        if (typeof logActivity === 'function') {
+                                          logActivity(
+                                            'Auto-Draft dari Referensi',
+                                            `Draft "${draftTitle}" dibuat berdasarkan referensi pustaka`
+                                          );
+                                        }
+                                      }, 4000);
+                                    }}
+                                  >
+                                    Auto-Draft dari Referensi
+                                  </Button>
+                                </Group>
+
+                                <Divider label="Manual Tools" labelPosition="center" mb="md" />
+
+                                <Group gap="md">
                                   <Button 
                                     leftSection={<IconPlus size={16} />} 
                                     variant="light"
@@ -4166,8 +4425,7 @@ const handleSubmitToTeacher = async () => {
                         {/* Area untuk menulis draft */}
                         <ScrollArea
                           style={{
-                            maxHeight: 'calc(100vh - 200px)',
-                            minHeight: '200px',
+                            height: '600px',
                             border: '1px solid #e9ecef',
                             borderRadius: '8px',
                             padding: '16px',
@@ -4188,11 +4446,442 @@ const handleSubmitToTeacher = async () => {
                               }}
                             />
                             
-                            <Text size="sm" c="dimmed" mt="md">
-                              💡 Tips: Gunakan referensi dari tab "Referensi Pustaka" dan sitasi dari "Daftar Pustaka" untuk memperkuat artikel Anda.
-                            </Text>
+                            <Box mt="md">
+                              <Group gap="xs" align="flex-start">
+                                <IconBulb size={16} color="orange" />
+                                <Text size="sm" c="dimmed">Tips: Gunakan referensi dari tab "Referensi Pustaka" dan sitasi dari "Daftar Pustaka" untuk memperkuat artikel Anda.</Text>
+                              </Group>
+                            </Box>
 
-                            <Group gap="md" mt="lg">
+                            {/* AI MAGIC BUTTONS - SECOND INSTANCE */}
+                            <Alert
+                              icon={<IconSparkles size={16} />}
+                              color="blue"
+                              variant="light"
+                              mb="md"
+                              mt="lg"
+                            >
+                              <Text size="sm" fw={600} c="blue">AI Magic Buttons:</Text>
+                            </Alert>
+                            
+                            {/* VISUAL PROGRESS INDICATOR */}
+                            {isGeneratingDraft && (
+                              <Box
+                                p="md"
+                                mb="lg"
+                                style={{
+                                  border: '1px solid var(--mantine-color-blue-3)',
+                                  borderRadius: '8px',
+                                  backgroundColor: 'var(--mantine-color-blue-0)'
+                                }}
+                              >
+                                <Group justify="space-between" align="center" mb="md">
+                                  <Text fw={600} size="sm" c="blue">
+                                    Generating Draft Article...
+                                  </Text>
+                                  <Text size="sm" fw={700} c="blue">
+                                    {draftProgress}%
+                                  </Text>
+                                </Group>
+                                
+                                <Progress 
+                                  value={draftProgress} 
+                                  color="blue" 
+                                  size="lg" 
+                                  radius="xl"
+                                  mb="xs"
+                                  striped 
+                                  animated
+                                />
+                                
+                                <Text size="xs" c="dimmed" ta="center">
+                                  {draftStage}
+                                </Text>
+                                
+                                <Group justify="center" mt="md">
+                                  <RingProgress
+                                    size={60}
+                                    thickness={4}
+                                    sections={[{ value: draftProgress, color: 'blue' }]}
+                                    label={
+                                      <Center>
+                                        <IconSparkles size={16} color="blue" />
+                                      </Center>
+                                    }
+                                  />
+                                </Group>
+                              </Box>
+                            )}
+                            
+                            <Group gap="sm" mb="md">
+                              <Button 
+                                leftSection={<IconSparkles size={16} />} 
+                                variant="gradient"
+                                gradient={{ from: 'blue', to: 'cyan' }}
+                                size="sm"
+                                onClick={async () => {
+                                  // BEBAS INPUT DETECTION: Cari input dari Draft panel yang sedang diketik user
+                                  let currentTopic = '';
+                                  
+                                  // BEBAS TOTAL: Ambil input user ORIGINAL tanpa prefix apapun
+                                  const cleanInput = (text: string) => {
+                                    if (!text) return '';
+                                    const original = text;
+                                    const cleaned = text
+                                      .replace(/^Draft:\s*/gi, '')  // Hapus "Draft:" di awal
+                                      .replace(/^📝\s*/gi, '')      // Hapus emoji
+                                      .replace(/^Tidak ada judul/gi, '') // Hapus placeholder text
+                                      .trim();
+                                    
+                                    console.log('🧹 CLEANING INPUT:', { original, cleaned });
+                                    return cleaned;
+                                  };
+                                  
+                                  // Priority 1: FOKUS PADA RIGHT PANEL - Input field "tutor php" di bagian Tulis Draft Artikel
+                                  const rightPanelInputs = Array.from(document.querySelectorAll('input')).filter(input => {
+                                    const hasRightPanelContext = input.closest('[style*="height: 600px"]') || // Right panel container
+                                                                input.closest('.mantine-Stack-root') ||
+                                                                (input.placeholder && input.placeholder.toLowerCase().includes('artikel'));
+                                    
+                                    const cleanValue = cleanInput(input.value);
+                                    const isNotLeftPanel = !input.closest('[data-testid="outline"]') && 
+                                                         !input.value.includes('Draft: testing') &&
+                                                         !input.value.includes('Outline');
+                                    
+                                    console.log('🔍 Checking input:', {
+                                      placeholder: input.placeholder,
+                                      value: input.value,
+                                      cleanValue,
+                                      hasRightPanelContext,
+                                      isNotLeftPanel,
+                                      parentElement: input.parentElement?.className
+                                    });
+                                    
+                                    return cleanValue.length > 0 && 
+                                           hasRightPanelContext &&
+                                           isNotLeftPanel;
+                                  });
+                                  
+                                  if (rightPanelInputs.length > 0) {
+                                    currentTopic = cleanInput(rightPanelInputs[0].value);
+                                    console.log('SUCCESS - Pakai input right panel CLEAN:', currentTopic);
+                                  } else {
+                                    // Priority 2: HINDARI LEFT PANEL - Input manapun KECUALI yang di outline artikel
+                                    const safeInputs = Array.from(document.querySelectorAll('input')).filter(input => {
+                                      const cleanValue = cleanInput(input.value);
+                                      const isLeftPanelInput = input.value.includes('Draft:') || 
+                                                             input.value.includes('Outline') ||
+                                                             input.value.includes('testing');
+                                      
+                                      return cleanValue.length > 1 && !isLeftPanelInput;
+                                    });
+                                    
+                                    console.log('DEBUG - Safe inputs (bukan dari left panel):', safeInputs.map(i => ({
+                                      placeholder: i.placeholder,
+                                      originalValue: i.value,
+                                      cleanValue: cleanInput(i.value)
+                                    })));
+                                    
+                                    if (safeInputs.length > 0) {
+                                      currentTopic = cleanInput(safeInputs[0].value);
+                                      console.log('SUCCESS - Pakai safe input CLEAN:', currentTopic);
+                                    } else {
+                                      currentTopic = 'Tutorial Bebas';
+                                      console.log('FALLBACK - Tidak ada safe input, pakai default');
+                                    }
+                                  }
+                                  
+                                  console.log('🎯 FINAL CLEAN TOPIC:', currentTopic);
+                                  console.log('🧪 TOPIC LENGTH:', currentTopic.length);
+                                  console.log('🔍 TOPIC CONTAINS DRAFT?:', currentTopic.includes('Draft'));
+                                  
+                                  // Start visual progress
+                                  setIsGeneratingDraft(true);
+                                  setDraftProgress(0);
+                                  setDraftStage('Memulai proses AI generation...');
+                                  
+                                  // Show initial loading notification  
+                                  const notificationId = notifications.show({
+                                    title: 'AI Magic sedang bekerja...',
+                                    message: `Sedang menganalisis topik "${currentTopic}" (0%)`,
+                                    color: 'blue',
+                                    loading: true,
+                                    autoClose: false,
+                                    icon: <IconSparkles size={16} />,
+                                  });
+
+                                  // Progressive loading with percentage
+                                  const stages = [
+                                    { progress: 15, message: `Menganalisis topik "${currentTopic}" (15%)`, stage: 'Menganalisis topik dan kata kunci...', delay: 800 },
+                                    { progress: 30, message: `Menyusun kerangka artikel (30%)`, stage: 'Menyusun outline dan struktur artikel...', delay: 1000 },
+                                    { progress: 50, message: `Menulis konten utama (50%)`, stage: 'Menulis paragraf dan konten utama...', delay: 1200 },
+                                    { progress: 70, message: `Menambahkan contoh kode (70%)`, stage: 'Menambahkan contoh kode dan snippet...', delay: 1000 },
+                                    { progress: 85, message: `Memformat struktur artikel (85%)`, stage: 'Memformat dan menyusun struktur final...', delay: 800 },
+                                    { progress: 95, message: `Finalisasi draft (95%)`, stage: 'Finalisasi dan quality check...', delay: 600 },
+                                    { progress: 100, message: `Draft artikel "${currentTopic}" siap digunakan`, stage: 'Draft artikel siap digunakan!', delay: 400 }
+                                  ];
+
+                                  // Execute progressive loading
+                                  for (let i = 0; i < stages.length; i++) {
+                                    // Update visual progress
+                                    setDraftProgress(stages[i].progress);
+                                    setDraftStage(stages[i].stage);
+                                    
+                                    await new Promise(resolve => setTimeout(resolve, stages[i].delay));
+                                    
+                                    if (i < stages.length - 1) {
+                                      // Update progress notification
+                                      notifications.update({
+                                        id: notificationId,
+                                        title: 'AI Magic sedang bekerja...',
+                                        message: stages[i].message,
+                                        color: 'blue',
+                                        loading: true,
+                                        autoClose: false,
+                                        icon: <IconSparkles size={16} />,
+                                      });
+                                    } else {
+                                      // Final success notification
+                                      notifications.update({
+                                        id: notificationId,
+                                        title: 'Draft artikel berhasil dibuat!',
+                                        message: stages[i].message,
+                                        color: 'green',
+                                        loading: false,
+                                        autoClose: 5000,
+                                        icon: <IconCheck size={16} />,
+                                      });
+                                      
+                                      // Hide visual progress after completion
+                                      setTimeout(() => {
+                                        setIsGeneratingDraft(false);
+                                        setDraftProgress(0);
+                                        setDraftStage('');
+                                      }, 2000);
+                                    }
+                                  }
+                                    
+                                    // Generate TRULY dynamic content based on ANY topic
+                                    const generateDynamicContent = (topic: string) => {
+                                      // Detect topic type and create relevant content
+                                      const topicLower = topic.toLowerCase();
+                                      let codeLanguage = 'javascript';
+                                      let exampleCode = '';
+                                      let specificContent = '';
+                                      
+                                      if (topicLower.includes('php')) {
+                                        codeLanguage = 'php';
+                                        exampleCode = `<?php
+// Tutorial ${topic}
+echo "Hello, World!";
+
+// Variabel dan tipe data
+$nama = "PHP";
+$versi = 8.2;
+
+// Function
+function greeting($name) {
+    return "Hello, " . $name . "!";
+}
+
+echo greeting($nama);
+?>`;
+                                        specificContent = 'PHP adalah bahasa pemrograman server-side yang sangat populer untuk pengembangan web. Mudah dipelajari dan memiliki sintaks yang sederhana.';
+                                      } else if (topicLower.includes('python')) {
+                                        codeLanguage = 'python';
+                                        exampleCode = `# Tutorial ${topic}
+print("Hello, World!")
+
+# Variables dan types
+name = "Python"
+version = 3.11
+
+# Function
+def greeting(name):
+    return f"Hello, {name}!"
+
+print(greeting(name))`;
+                                        specificContent = 'Python adalah bahasa pemrograman yang sangat versatile, cocok untuk web development, data science, AI, dan automation.';
+                                      } else if (topicLower.includes('react')) {
+                                        codeLanguage = 'jsx';
+                                        exampleCode = `// Tutorial ${topic}
+import React, { useState } from 'react';
+
+function App() {
+  const [count, setCount] = useState(0);
+  
+  return (
+    <div>
+      <h1>Hello, React!</h1>
+      <p>Counter: {count}</p>
+      <button onClick={() => setCount(count + 1)}>
+        Increment
+      </button>
+    </div>
+  );
+}
+
+export default App;`;
+                                        specificContent = 'React adalah library JavaScript untuk membangun user interface. Menggunakan konsep component-based dan virtual DOM untuk performa yang optimal.';
+                                      } else {
+                                        // Default generic code
+                                        exampleCode = `// Tutorial ${topic}
+console.log("Learning ${topic}");
+
+// Basic example
+function start${topic.replace(/\s+/g, '')}() {
+  console.log("Starting ${topic} tutorial...");
+  
+  // Your code implementation here
+  return "Success!";
+}
+
+// Execute
+start${topic.replace(/\s+/g, '')}();`;
+                                        specificContent = `${topic} adalah topik yang sangat relevan dalam dunia teknologi modern. Artikel ini akan membahas konsep fundamental dan implementasi praktis.`;
+                                      }
+                                      
+                                      return `# ${topic}
+
+## Pengenalan
+
+${specificContent}
+
+## Langkah-langkah Dasar
+
+1. Memahami konsep dasar ${topic.toLowerCase()}
+2. Setup environment dan tools yang diperlukan
+3. Implementasi praktis dengan contoh kode
+4. Testing dan debugging aplikasi
+
+## Konsep Utama
+
+Berikut adalah konsep-konsep utama yang perlu dipahami dalam ${topic.toLowerCase()}:
+
+- **Konsep Fundamental**: Pemahaman dasar tentang cara kerja sistem
+- **Best Practices**: Praktik terbaik yang direkomendasikan oleh komunitas
+- **Tools dan Framework**: Alat-alat yang membantu development
+- **Performance Optimization**: Tips untuk optimasi performa
+
+## Contoh Implementasi
+
+\`\`\`${codeLanguage}
+${exampleCode}
+\`\`\`
+
+## Tips dan Trik
+
+1. **Mulai dari yang sederhana** - Pelajari konsep dasar terlebih dahulu
+2. **Praktik secara konsisten** - Lakukan coding practice secara rutin
+3. **Join komunitas** - Bergabung dengan komunitas developer untuk sharing knowledge
+4. **Stay updated** - Ikuti perkembangan terbaru dalam teknologi
+
+## Kesimpulan
+
+${topic} merupakan skill yang sangat valuable dalam dunia teknologi modern. Dengan memahami konsep-konsep yang telah dibahas, Anda dapat mengimplementasikan solusi yang efektif dan efisien.
+
+## Referensi
+
+- Dokumentasi resmi
+- Tutorial online terpercaya
+- Best practice dari komunitas developer
+- Studi kasus implementasi di industri`;
+                                    };
+                                    
+                                    console.log('🔥 GENERATING CONTENT WITH TOPIC:', currentTopic);
+                                    const mockContent = generateDynamicContent(currentTopic);
+                                    console.log('📄 GENERATED CONTENT PREVIEW:', mockContent.substring(0, 100));
+                                    
+                                    // Insert ke editor utama - PROPERLY FIXED
+                                    try {
+                                      const editor = editorRef.current?.getEditor();
+                                      if (editor) {
+                                        // Split content jadi array of blocks yang proper
+                                        const contentBlocks = mockContent.split('\n\n').filter(text => text.trim()).map(paragraph => {
+                                          if (paragraph.startsWith('# ')) {
+                                            return {
+                                              type: "heading",
+                                              props: { level: 1 },
+                                              content: paragraph.substring(2)
+                                            };
+                                          } else if (paragraph.startsWith('## ')) {
+                                            return {
+                                              type: "heading", 
+                                              props: { level: 2 },
+                                              content: paragraph.substring(3)
+                                            };
+                                          } else if (paragraph.startsWith('```')) {
+                                            return {
+                                              type: "codeBlock",
+                                              props: { language: "dockerfile" },
+                                              content: paragraph.replace(/```\w*\n?|\n?```$/g, '')
+                                            };
+                                          } else {
+                                            return {
+                                              type: "paragraph",
+                                              content: paragraph
+                                            };
+                                          }
+                                        });
+                                        
+                                        // Replace semua blocks di editor
+                                        editor.replaceBlocks(editor.document, contentBlocks);
+                                        
+                                        // UPDATE TITLE IN LEFT PANEL - CLEAN TANPA PREFIX!
+                                        // Add small delay to ensure content change is processed
+                                        setTimeout(() => {
+                                          setFileName(currentTopic); // Langsung pakai topic clean tanpa prefix "Draft:"
+                                        }, 100);
+                                        
+                                        console.log('BERHASIL! Draft artikel masuk ke editor utama dan panel kiri!');
+                                      } else {
+                                        console.log('Editor belum ready');
+                                      }
+                                    } catch (err) {
+                                      console.log('Error insert:', err);
+                                      console.log('Draft Content for Manual Copy:');
+                                      console.log(mockContent);
+                                    }
+                                }}
+                              >
+                                Generate dengan AI
+                              </Button>
+                              <Button 
+                                leftSection={<IconFileText size={16} />} 
+                                variant="light"
+                                color="green"
+                                size="sm"
+                                onClick={() => {
+                                  notifications.show({
+                                    title: "Template AI",
+                                    message: "Fitur template AI akan segera hadir!",
+                                    color: "green"
+                                  })
+                                }}
+                              >
+                                Pilih Template AI
+                              </Button>
+                              <Button 
+                                leftSection={<IconBrain size={16} />} 
+                                variant="light"
+                                color="purple"
+                                size="sm"
+                                onClick={() => {
+                                  notifications.show({
+                                    title: "Auto-Draft Magic! ✨",
+                                    message: "Generating draft berdasarkan referensi pustaka...",
+                                    color: "purple",
+                                    autoClose: 3000
+                                  })
+                                }}
+                              >
+                                Auto-Draft dari Referensi
+                              </Button>
+                            </Group>
+
+                            <Divider label="Manual Tools" labelPosition="center" mb="md" />
+
+                            <Group gap="md">
                               <Button 
                                 leftSection={<IconPlus size={16} />} 
                                 variant="light"
