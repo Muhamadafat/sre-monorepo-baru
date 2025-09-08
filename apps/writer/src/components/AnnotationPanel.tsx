@@ -385,23 +385,25 @@ export default function AnnotationPanel({ sessionId }: { sessionId?: string }) {
               onChange={setMenuOpened}
             >
               <Menu.Target>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="sm"
-                  style={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    ...styles
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpened(true);
-                  }}
-                >
-                  <IconDots size={16} />
-                </ActionIcon>
+                <Tooltip label="Opsi artikel - lihat, bookmark, atau hapus">
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="sm"
+                    style={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      ...styles
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpened(true);
+                    }}
+                  >
+                    <IconDots size={16} />
+                  </ActionIcon>
+                </Tooltip>
               </Menu.Target>
 
               <Menu.Dropdown>

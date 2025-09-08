@@ -45,7 +45,7 @@ const AI_TEMPLATES: AITemplate[] = [
   {
     id: 'auto-reference',
     name: 'Auto-Draft dari Referensi',
-    description: 'Generate draft otomatis berdasarkan referensi pustaka yang tersedia',
+    description: 'Generate draft otomatis berdasarkan referensi pustaka yang tersedia. Cocok untuk pemula yang ingin bantuan AI lengkap.',
     icon: IconBrain,
     color: 'blue',
     prompt: 'Buat draft artikel berdasarkan referensi pustaka yang ada, dengan struktur akademis yang baik',
@@ -54,7 +54,7 @@ const AI_TEMPLATES: AITemplate[] = [
   {
     id: 'structured',
     name: 'Template Terstruktur',
-    description: 'Draft dengan struktur akademis lengkap (pendahuluan, metodologi, hasil, kesimpulan)',
+    description: 'Draft dengan struktur akademis lengkap (pendahuluan, metodologi, hasil, kesimpulan). Format paper ilmiah standar.',
     icon: IconTemplate,
     color: 'green',
     prompt: 'Buat draft artikel dengan struktur akademis: pendahuluan, tinjauan pustaka, metodologi, hasil, pembahasan, kesimpulan',
@@ -63,7 +63,7 @@ const AI_TEMPLATES: AITemplate[] = [
   {
     id: 'quick-outline',
     name: 'Outline Cepat',
-    description: 'Generate outline dan kerangka artikel dengan cepat',
+    description: 'Generate outline dan kerangka artikel dengan cepat. Ideal untuk brainstorming awal dan perencanaan.',
     icon: IconRocket,
     color: 'orange',
     prompt: 'Buat outline dan kerangka artikel yang komprehensif dengan poin-poin utama',
@@ -72,7 +72,7 @@ const AI_TEMPLATES: AITemplate[] = [
   {
     id: 'citation-heavy',
     name: 'Heavy Citation',
-    description: 'Draft dengan banyak sitasi dan referensi akademis',
+    description: 'Draft dengan banyak sitasi dan referensi akademis. Untuk artikel review atau literature survey.',
     icon: IconQuote,
     color: 'purple',
     prompt: 'Buat draft artikel dengan banyak sitasi dan referensi yang mendukung setiap argumen',
@@ -271,11 +271,11 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
               size="lg"
               variant="gradient"
               gradient={{ from: 'blue', to: 'cyan' }}
-              leftSection={<IconRocket size={20} />}
               onClick={handleQuickGenerate}
               loading={isGenerating}
+              title="Generate draft artikel dengan AI cepat"
             >
-              🚀 Generate dengan AI
+              <IconRocket size={24} />
             </Button>
           </Grid.Col>
           
@@ -285,11 +285,11 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
               size="lg"
               variant="light"
               color="green"
-              leftSection={<IconTemplate size={20} />}
               onClick={() => setShowTemplateModal(true)}
               disabled={isGenerating}
+              title="Pilih template AI untuk draft artikel"
             >
-              📝 Pilih Template AI
+              <IconTemplate size={24} />
             </Button>
           </Grid.Col>
           
@@ -299,14 +299,14 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
               size="lg"
               variant="light"
               color="purple"
-              leftSection={<IconBrain size={20} />}
               onClick={() => {
                 const refTemplate = AI_TEMPLATES.find(t => t.id === 'auto-reference')!
                 generateWithAI(refTemplate, topic)
               }}
               disabled={isGenerating || !topic.trim()}
+              title="Auto-Draft dari referensi pustaka dengan AI"
             >
-              ✨ Auto-Draft dari Referensi
+              <IconBrain size={24} />
             </Button>
           </Grid.Col>
         </Grid>
@@ -343,10 +343,18 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
           </Card>
           
           <Group mt="md" justify="flex-end">
-            <Button variant="light" leftSection={<IconPlus size={16} />}>
-              Gunakan Draft Ini
+            <Button 
+              variant="light" 
+              title="Gunakan draft ini untuk menulis"
+            >
+              <IconPlus size={16} />
             </Button>
-            <Button variant="outline">Edit Draft</Button>
+            <Button 
+              variant="outline"
+              title="Edit draft sebelum digunakan"
+            >
+              <IconEdit size={16} />
+            </Button>
           </Group>
         </Card>
       )}

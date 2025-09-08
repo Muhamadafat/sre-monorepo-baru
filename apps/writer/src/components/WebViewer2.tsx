@@ -13,6 +13,7 @@ import {
   Title,
   Divider,
   Stack,
+  Tooltip,
   useMantineColorScheme,
   useMantineTheme,
 } from "@mantine/core"
@@ -225,9 +226,11 @@ const WebViewer: React.FC<WebViewerProps> = ({ fileUrl, onAnalytics }) => {
           borderBottom: `1px solid ${isDark ? theme.colors.dark[4] : theme.colors.gray[3]}`,
         }}
       >
-        <Button onClick={handleDownload} variant="light" size="xs" color={isDark ? "blue" : "blue"}>
-          Download PDF
-        </Button>
+        <Tooltip label="Unduh file PDF ke perangkat Anda">
+          <Button onClick={handleDownload} variant="light" size="xs" color={isDark ? "blue" : "blue"}>
+            Download PDF
+          </Button>
+        </Tooltip>
       </Group>
       <div style={{ display: "flex", height: "100%" }}>
         {/* Kiri: PDF Viewer */}

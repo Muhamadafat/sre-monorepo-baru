@@ -21,8 +21,10 @@ import {
   Card,
   Center,
   CopyButton,
+  Divider,
   Group,
   Loader,
+  Menu,
   Modal,
   Overlay,
   Paper,
@@ -50,6 +52,7 @@ import {
   IconFileText,
   IconInfoCircle,
   IconList,
+  IconWand,
   IconMapPin,
   IconMath,
   IconPencil,
@@ -58,7 +61,6 @@ import {
   IconRobot,
   IconSparkles,
   IconTrash,
-  IconWand,
   IconX,
 } from "@tabler/icons-react";
 import { generateText } from "ai";
@@ -513,6 +515,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
 
     // LaTeX Modal state
     const [isLatexModalOpen, setIsLatexModalOpen] = React.useState(false);
+    const [isAIToolsExpanded, setIsAIToolsExpanded] = React.useState(false);
 
     // Enhanced AI Streaming state with progress
     const [aiStreamingState, setAIStreamingState] = React.useState<AIStreamingState>({
@@ -535,10 +538,10 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     // AI Model setup
     const aiModel = React.useMemo(() => {
       try {
-        const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
 
         if (!apiKey) {
-          console.warn("NEXT_PUBLIC_GROQ_API_KEY not found. AI features will be disabled.");
+          console.warn("GOOGLE_API_KEY not found. AI features will be disabled.");
           return null;
         }
 
@@ -1156,7 +1159,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     const aiTemplates: AITemplate[] = [
       {
         title: "Buat Struktur ",
-        description: " Outline lengkap dengan judul dan sub-judul ",
+        description: "Membuat outline lengkap dengan judul dan sub-judul secara otomatis berdasarkan topik",
         type: "structure",
         color: "blue",
         icon: IconList,
@@ -1165,7 +1168,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       },
       {
         title: "Isi Konten ",
-        description: " Konten detail dan mendalam untuk topik ",
+        description: "Menghasilkan konten detail dan mendalam untuk bagian tertentu dalam artikel",
         type: "content",
         color: "green",
         icon: IconEdit,
@@ -1174,7 +1177,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       },
       {
         title: "Lanjutkan Kalimat",
-        description: " Melanjutkan kalimat atau paragraf yang sudah ada ",
+        description: "Melanjutkan kalimat atau paragraf yang sedang ditulis dengan AI cerdas",
         type: "sentence",
         color: "orange",
         icon: IconPencilPlus,
@@ -1187,7 +1190,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     const aiAutoTemplates: AIAutoTemplate[] = [
       {
         title: "Buat Struktur ",
-        description: " Outline lengkap dengan judul dan sub-judul",
+        description: "Membuat outline lengkap dengan judul dan sub-judul tanpa input manual",
         type: "structure",
         color: "blue",
         icon: IconList,
@@ -1195,7 +1198,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       },
       {
         title: "Buat Isi Konten",
-        description: " Konten detail dan mendalam untuk topik secara otomatis ",
+        description: "Menghasilkan konten detail dan mendalam untuk topik secara otomatis",
         type: "content",
         color: "green",
         icon: IconEdit,
@@ -1203,7 +1206,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       },
       {
         title: "Lanjutkan Kalimat",
-        description: "Melanjutkan kalimat atau paragraf yang sudah ada",
+        description: "Melanjutkan kalimat atau paragraf yang sudah ada dengan AI",
         type: "sentence",
         color: "orange",
         icon: IconPencilPlus,
@@ -1216,19 +1219,19 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       {
         icon: <IconPencilPlus size={15} />,
         title: "Lanjutkan Tulisan",
-        description: "Biarkan AI meneruskan ide dari kalimat terakhir Anda",
+        description: "AI akan meneruskan ide dari kalimat terakhir secara kontekstual",
         action: "continue"
       },
       {
         icon: <IconFileText size={15} />,
         title: "Ringkasan Cerdas",
-        description: "Dapatkan inti dari tulisan Anda dalam versi yang lebih singkat",
+        description: "Menghasilkan ringkasan otomatis dari tulisan yang sudah ada",
         action: "summarize"
       },
       {
         icon: <IconBulb size={15} />,
         title: "Tulis Sesuatu...",
-        description: "Minta AI untuk menulis sesuai kebutuhanmu.",
+        description: "Mode bebas untuk meminta AI menulis sesuai kebutuhan spesifik",
         action: "write_anything"
       }
     ];
@@ -3186,6 +3189,7 @@ INSTRUKSI:
 
     return (
       <>
+
         <div style={{ 
           position: 'relative', 
           height: '100%', 
@@ -3264,14 +3268,87 @@ INSTRUKSI:
                     <IconArrowForwardUp size={18} />
                   </ActionIcon>
                 </Tooltip>
-                <Button
-                variant="outline"
-                color="red"
-                size="compact-md"
-                onClick={openDeleteConfirmation}
-              >
-                <IconTrash size={18} />
-              </Button>
+                
+                {/* AI Tools Dropdown Menu */}
+                <Menu shadow="lg" width={280} position="bottom-end">
+                  <Menu.Target>
+                    <Tooltip label="AI Tools - Klik untuk membuka semua fitur AI">
+                      <ActionIcon
+                        variant="gradient"
+                        gradient={{ from: 'blue', to: 'cyan' }}
+                        size="lg"
+                        radius="xl"
+                        style={{
+                          transition: 'all 0.3s ease',
+                          '&:hover': { transform: 'scale(1.05)' }
+                        }}
+                      >
+                        <IconSparkles size={18} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Menu.Target>
+
+                  <Menu.Dropdown>
+                    <Menu.Label>
+                      <Group gap="xs">
+                        <IconSparkles size={16} />
+                        <Text fw={600} c="blue">AI TOOLS</Text>
+                        <Badge variant="dot" color="green" size="xs">Aktif</Badge>
+                      </Group>
+                    </Menu.Label>
+
+                    {aiTemplates.map((template, index) => (
+                      <Menu.Item
+                        key={index}
+                        leftSection={<template.icon size={16} color={template.color} />}
+                        onClick={() => {
+                          setCurrentAIType(template.type);
+                          setAIMode("new");
+                          setGeneratedContent("");
+                          openAIModal();
+                        }}
+                      >
+                        <div>
+                          <Text size="sm" fw={500}>{template.title}</Text>
+                          <Text size="xs" c="dimmed">{template.description}</Text>
+                        </div>
+                      </Menu.Item>
+                    ))}
+
+                    <Menu.Divider />
+
+                    <Menu.Item
+                      leftSection={<IconWand size={16} color="violet" />}
+                      onClick={() => handleInlineAIAction('continue')}
+                    >
+                      <div>
+                        <Text size="sm" fw={500}>🪄 Lanjutkan Menulis</Text>
+                        <Text size="xs" c="dimmed">AI akan meneruskan tulisan dari posisi cursor</Text>
+                      </div>
+                    </Menu.Item>
+
+                    <Menu.Item
+                      leftSection={<IconFileText size={16} color="teal" />}
+                      onClick={() => handleInlineAIAction('summarize')}
+                    >
+                      <div>
+                        <Text size="sm" fw={500}>📋 Ringkas Artikel</Text>
+                        <Text size="xs" c="dimmed">Buat ringkasan dari konten yang sudah ditulis</Text>
+                      </div>
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+                
+                <Tooltip label="Hapus semua konten artikel (tidak bisa dibatalkan)">
+                  <Button
+                    variant="outline"
+                    color="red"
+                    size="compact-md"
+                    onClick={openDeleteConfirmation}
+                  >
+                    <IconTrash size={18} />
+                  </Button>
+                </Tooltip>
 
               </Group>
 
@@ -4397,41 +4474,47 @@ INSTRUKSI:
                   </div>
 
                   <Group gap="sm">
-                    <Button
-                      size="sm"
-                      variant="gradient"
-                      gradient={{ from: 'green', to: 'teal' }}
-                      leftSection={<IconCheck size={16} />}
-                      onClick={acceptAIContent}
-                      style={{ fontWeight: 600 }}
-                    >
-                      Setuju
-                    </Button>
+                    <Tooltip label="Terima dan gunakan konten yang dihasilkan AI">
+                      <Button
+                        size="sm"
+                        variant="gradient"
+                        gradient={{ from: 'green', to: 'teal' }}
+                        leftSection={<IconCheck size={16} />}
+                        onClick={acceptAIContent}
+                        style={{ fontWeight: 600 }}
+                      >
+                        Setuju
+                      </Button>
+                    </Tooltip>
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      color="red"
-                      leftSection={<IconX size={16} />}
-                      onClick={revertAIContent}
-                      style={{ fontWeight: 600 }}
-                    >
-                      kembalikan
-                    </Button>
+                    <Tooltip label="Tolak dan kembalikan ke konten sebelumnya">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        color="red"
+                        leftSection={<IconX size={16} />}
+                        onClick={revertAIContent}
+                        style={{ fontWeight: 600 }}
+                      >
+                        kembalikan
+                      </Button>
+                    </Tooltip>
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      color="blue"
-                      leftSection={<IconRefresh size={16} />}
-                      onClick={() => {
-                        revertAIContent();
-                        setTimeout(() => handleInlineAIAction('continue'), 100);
-                      }}
-                      style={{ fontWeight: 600 }}
-                    >
-                      Mulai Ulang
-                    </Button>
+                    <Tooltip label="Hapus konten AI dan mulai ulang dari awal">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        color="blue"
+                        leftSection={<IconRefresh size={16} />}
+                        onClick={() => {
+                          revertAIContent();
+                          setTimeout(() => handleInlineAIAction('continue'), 100);
+                        }}
+                        style={{ fontWeight: 600 }}
+                      >
+                        Mulai Ulang
+                      </Button>
+                    </Tooltip>
                   </Group>
                 </Stack>
               </Paper>
@@ -4787,14 +4870,16 @@ INSTRUKSI:
                             Topik atau Kata Kunci
                           </Text>
                         </Group>
-                        <Button
-                          variant="subtle"
-                          color="gray"
-                          onClick={clearInputs}
-                          size="xs"
-                        >
-                          Bersihkan
-                        </Button>
+                        <Tooltip label="Bersihkan semua input dan mulai dari awal">
+                          <Button
+                            variant="subtle"
+                            color="gray"
+                            onClick={clearInputs}
+                            size="xs"
+                          >
+                            Bersihkan
+                          </Button>
+                        </Tooltip>
                       </Group>
                       <Textarea
                         placeholder="Untuk mode 'Struktur' - jelaskan topik secara umum . Untuk mode 'Konten' - masukkan bab/sub bab spesifik. Untuk mode 'Kalimat' - berikan konteks atau arah lanjutan "
@@ -4960,15 +5045,17 @@ INSTRUKSI:
                   </div>
                   <CopyButton value={generatedContent} timeout={2000}>
                     {({ copied, copy }) => (
-                      <Button
-                        leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
-                        variant="light"
-                        color={copied ? "teal" : "gray"}
-                        onClick={copy}
-                        size="sm"
-                      >
-                        {copied ? "Tersalin!" : "Salin Teks"}
-                      </Button>
+                      <Tooltip label={copied ? "Konten sudah tersalin!" : "Salin konten ke clipboard"}>
+                        <Button
+                          leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                          variant="light"
+                          color={copied ? "teal" : "gray"}
+                          onClick={copy}
+                          size="sm"
+                        >
+                          {copied ? "Tersalin!" : "Salin Teks"}
+                        </Button>
+                      </Tooltip>
                     )}
                   </CopyButton>
                 </Group>
@@ -4998,51 +5085,55 @@ INSTRUKSI:
 
                 {/* Action Buttons */}
                 <Group gap="md" grow>
-                  <Button
-                    size="lg"
-                    variant="gradient"
-                    gradient={{ from: 'blue', to: 'cyan' }}
-                    leftSection={<IconPencil size={20} />}
-                    onClick={() => {
-                      const behaviorMap: { [key: string]: string } = {
-                        "structure": "rewrite",
-                        "content": currentAIType === "content" && aiMode === "auto" ? "add" : "content_cursor",
-                        "sentence": currentAIType === "sentence" && aiMode === "auto" ? "add" : "cursor"
-                      };
-                      const behavior = behaviorMap[currentAIType] || "rewrite";
-                      insertContentToEditor(behavior);
-                    }}
-                    style={{
-                      height: '50px',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {currentAIType === "structure" ? "Ganti Semua Struktur" :
-                      (currentAIType === "content" && aiMode === "auto") ? "Tambah Konten" :
-                        currentAIType === "content" ? "Tambah di Heading" :
-                          (currentAIType === "sentence" && aiMode === "auto") ? "Tambah Kalimat" :
-                            currentAIType === "sentence" ? "Lanjutkan di Cursor" :
-                              aiMode === "continue" ? "Tambahkan ke Editor" : "Masukkan ke Editor"}
-                  </Button>
+                  <Tooltip label="Masukkan konten AI yang dihasilkan ke dalam editor">
+                    <Button
+                      size="lg"
+                      variant="gradient"
+                      gradient={{ from: 'blue', to: 'cyan' }}
+                      leftSection={<IconPencil size={20} />}
+                      onClick={() => {
+                        const behaviorMap: { [key: string]: string } = {
+                          "structure": "rewrite",
+                          "content": currentAIType === "content" && aiMode === "auto" ? "add" : "content_cursor",
+                          "sentence": currentAIType === "sentence" && aiMode === "auto" ? "add" : "cursor"
+                        };
+                        const behavior = behaviorMap[currentAIType] || "rewrite";
+                        insertContentToEditor(behavior);
+                      }}
+                      style={{
+                        height: '50px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {currentAIType === "structure" ? "Ganti Semua Struktur" :
+                        (currentAIType === "content" && aiMode === "auto") ? "Tambah Konten" :
+                          currentAIType === "content" ? "Tambah di Heading" :
+                            (currentAIType === "sentence" && aiMode === "auto") ? "Tambah Kalimat" :
+                              currentAIType === "sentence" ? "Lanjutkan di Cursor" :
+                                aiMode === "continue" ? "Tambahkan ke Editor" : "Masukkan ke Editor"}
+                    </Button>
+                  </Tooltip>
 
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    color="gray"
-                    leftSection={<IconSparkles size={20} />}
-                    onClick={() => {
-                      setGeneratedContent("");
-                      if (aiMode !== "auto") {
-                        setPrompt("");
-                      }
-                    }}
-                    style={{
-                      height: '50px',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Generate Ulang
-                  </Button>
+                  <Tooltip label="Hapus konten saat ini dan generate ulang dengan AI">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      color="gray"
+                      leftSection={<IconSparkles size={20} />}
+                      onClick={() => {
+                        setGeneratedContent("");
+                        if (aiMode !== "auto") {
+                          setPrompt("");
+                        }
+                      }}
+                      style={{
+                        height: '50px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Generate Ulang
+                    </Button>
+                  </Tooltip>
                 </Group>
 
                 {/* Behavior Info */}
@@ -5085,20 +5176,24 @@ INSTRUKSI:
               </Text>
             </Stack>
             <Group grow w="100%">
-              <Button
-                variant="default"
-                onClick={closeDeleteConfirmation}
-                size="md"
-              >
-                Batal
-              </Button>
-              <Button
-                color="red"
-                onClick={handleDelete}
-                size="md"
-              >
-                Ya, Hapus Semua
-              </Button>
+              <Tooltip label="Batalkan dan kembali ke editor">
+                <Button
+                  variant="default"
+                  onClick={closeDeleteConfirmation}
+                  size="md"
+                >
+                  Batal
+                </Button>
+              </Tooltip>
+              <Tooltip label="Konfirmasi hapus semua konten (tidak dapat dibatalkan)">
+                <Button
+                  color="red"
+                  onClick={handleDelete}
+                  size="md"
+                >
+                  Ya, Hapus Semua
+                </Button>
+              </Tooltip>
             </Group>
           </Stack>
         </Modal>

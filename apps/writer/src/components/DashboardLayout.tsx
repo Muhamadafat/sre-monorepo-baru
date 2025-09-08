@@ -16,6 +16,7 @@ import {
   ColorPicker,
   Button,
   Group,
+  Tooltip,
 } from '@mantine/core';
 import { DashboardHeader } from './DashboardHeader';
 import { DashboardNavbar } from './DashboardNavbar';
@@ -253,22 +254,26 @@ export function DashboardLayout({
       </Box>
 
       <Group justify="flex-end" mt="md">
-        <Button
-          variant="subtle"
-          onClick={() => {
-            setCreateModalOpen(false);
-            setNewSession({ title: '', description: '', coverColor: '#4c6ef5' });
-          }}
-        >
-          Batal
-        </Button>
-        <Button 
-          onClick={handleCreateSession} 
-          disabled={!newSession.title.trim()}
-          loading={loading}
-        >
-          Buat Sesi
-        </Button>
+        <Tooltip label="Batalkan dan tutup modal tanpa menyimpan">
+          <Button
+            variant="subtle"
+            onClick={() => {
+              setCreateModalOpen(false);
+              setNewSession({ title: '', description: '', coverColor: '#4c6ef5' });
+            }}
+          >
+            Batal
+          </Button>
+        </Tooltip>
+        <Tooltip label="Simpan dan buat sesi brainstorming baru">
+          <Button 
+            onClick={handleCreateSession} 
+            disabled={!newSession.title.trim()}
+            loading={loading}
+          >
+            Buat Sesi
+          </Button>
+        </Tooltip>
       </Group>
     </Stack>
   </Modal>

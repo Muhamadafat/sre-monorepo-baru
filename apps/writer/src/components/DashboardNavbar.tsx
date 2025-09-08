@@ -31,12 +31,14 @@ const dashboard = [
   {
     icon: <IconHome/>,
     name: 'Home',
-    href: '/home'
+    href: '/home',
+    description: 'Halaman utama dashboard'
   },
   {
     icon: <IconChartDots2Filled/>,
     name: 'Knowledge Graph',
     href: '/dashboard',
+    description: 'Visualisasi grafik pengetahuan untuk brainstorming ide'
   },
   // {
   //   icon: <IconArticleFilled/>,
@@ -111,7 +113,6 @@ export function DashboardNavbar({
             key={i}
             component={Link}
             href={dash.href}
-            leftSection={isCollapsed ? dash.icon : null}
             variant="gradient"
             gradient={{
               from: 'blue', to: 'cyan', deg: 45
@@ -120,13 +121,13 @@ export function DashboardNavbar({
             radius='md'
             fullWidth
             style={{
-              justifyItems: isCollapsed ? 'center' : 'flex-start',
+              justifyContent: 'center',
               minHeight: rem(36),
-              padding: isCollapsed ? rem(8) : undefined,
+              padding: isCollapsed ? rem(8) : rem(12),
             }}
-            title={isCollapsed ? dash.name : undefined}
+            title={`${dash.name}: ${dash.description}`}
           >
-            {isCollapsed ? dash.icon : dash.name}
+            {dash.icon}
           </Button>
         ))}
       </Stack>
@@ -144,7 +145,6 @@ export function DashboardNavbar({
       )}
 
       <Button 
-        leftSection={isCollapsed ? <IconPlus size={18} /> : null}
         variant="gradient"
         gradient={{ from: 'blue', to: 'cyan', deg: 45 }}
         size="md"
@@ -152,13 +152,13 @@ export function DashboardNavbar({
         fullWidth
         onClick={onNewSession}
         style={{
-          justifyContent: isCollapsed ? 'center' : 'flex-start',
+          justifyContent: 'center',
           minHeight: rem(36),
-          padding: isCollapsed ? rem(8) : undefined,
+          padding: isCollapsed ? rem(8) : rem(12),
         }}
-        title={isCollapsed ? 'Tambah Sesi Baru' : undefined}
+        title="Tambah Sesi Baru: Mulai brainstorming topik baru"
       >
-        {isCollapsed ? <IconPlus size={18}/> : 'Tambah Sesi Baru'}
+        <IconPlus size={18}/>
       </Button>
       
       {!isCollapsed && (

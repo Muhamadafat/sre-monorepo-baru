@@ -137,7 +137,7 @@ export function DashboardHeader({ sidebarOpened, onToggleSidebar, mounted }: Das
         </Group>
 
         <Group gap="sm">
-          <Tooltip label={dark ? "Light mode" : "Dark mode"}>
+          <Tooltip label={dark ? "Ubah ke mode terang" : "Ubah ke mode gelap"}>
             <ActionIcon
               variant="light"
               color={dark ? "yellow" : "blue"}
@@ -149,7 +149,7 @@ export function DashboardHeader({ sidebarOpened, onToggleSidebar, mounted }: Das
             </ActionIcon>
           </Tooltip>
 
-          <Tooltip label="Settings">
+          <Tooltip label="Pengaturan aplikasi dan preferensi">
             <ActionIcon variant="light" color="gray" size="lg">
               <IconSettings size={18} />
             </ActionIcon>

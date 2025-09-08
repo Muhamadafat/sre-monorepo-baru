@@ -184,14 +184,14 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
           </Group>
           <Group gap="xs">
             {onExport && (
-              <Tooltip label="Export log">
+              <Tooltip label="Export aktivitas ke file untuk backup atau review">
                 <ActionIcon variant="light" color="violet" onClick={onExport}>
                   <IconDownload size={16} />
                 </ActionIcon>
               </Tooltip>
             )}
             {onClearAll && (
-              <Tooltip label="Hapus semua">
+              <Tooltip label="Hapus semua riwayat aktivitas (tidak bisa dibatalkan)">
                 <ActionIcon variant="light" color="red" onClick={onClearAll}>
                   <IconTrash size={16} />
                 </ActionIcon>
@@ -205,7 +205,7 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
         {/* Search and Filter */}
         <Group justify="space-between">
           <TextInput
-            placeholder="Cari aktivitas..."
+            placeholder="Cari berdasarkan judul, deskripsi, atau tipe aktivitas..."
             leftSection={<IconSearch size={16} />}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.currentTarget.value)}
