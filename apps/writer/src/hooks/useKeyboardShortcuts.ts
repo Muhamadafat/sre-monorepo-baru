@@ -1,0 +1,95 @@
+import { useCallback, useEffect } from 'react';
+
+export interface KeyboardShortcut {
+  key: string;
+  ctrl?: boolean;
+  alt?: boolean;
+  shift?: boolean;
+  meta?: boolean;
+  action: () => void;
+  description: string;
+}
+
+interface UseKeyboardShortcutsOptions {
+  shortcuts: KeyboardShortcut[];
+  enabled?: boolean;
+}
+
+export const useKeyboardShortcuts = ({ shortcuts, enabled = true }: UseKeyboardShortcutsOptions) => {
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (!enabled) return;
+
+    // Don't trigger shortcuts when user is typing in input fields
+    const target = event.target as HTMLElement;
+    if (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.contentEditable === 'true' ||
+      target.closest('[contenteditable="true"]')
+    ) {
+      // Only allow certain shortcuts in text fields (like Ctrl+S for save)
+      const allowedInInputs = ['s', 'n'];
+      const currentKey = event.key.toLowerCase();
+      if (!allowedInInputs.includes(currentKey) || !event.ctrlKey) {
+        return;
+      }
+    }
+
+    for (const shortcut of shortcuts) {
+      const matchesKey = event.key.toLowerCase() === shortcut.key.toLowerCase();
+      const matchesCtrl = shortcut.ctrl ? event.ctrlKey || event.metaKey : !event.ctrlKey && !event.metaKey;
+      const matchesAlt = shortcut.alt ? event.altKey : !event.altKey;
+      const matchesShift = shortcut.shift ? event.shiftKey : !event.shiftKey;
+      const matchesMeta = shortcut.meta ? event.metaKey : true;
+
+      if (matchesKey && matchesCtrl && matchesAlt && matchesShift && matchesMeta) {
+        event.preventDefault();
+        event.stopPropagation();
+        shortcut.action();
+        break;
+      }
+    }
+  }, [shortcuts, enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown, enabled]);
+
+  return { handleKeyDown };
+};
+
+// Predefined shortcut combinations
+export const SHORTCUTS = {
+  SAVE: { key: 's', ctrl: true, description: 'Save draft' },
+  NEW_DRAFT: { key: 'd', ctrl: true, alt: true, description: 'Create new draft' },
+  BOLD: { key: 'b', ctrl: true, description: 'Bold text' },
+  ITALIC: { key: 'i', ctrl: true, description: 'Italic text' },
+  UNDERLINE: { key: 'u', ctrl: true, description: 'Underline text' },
+  COPY: { key: 'c', ctrl: true, description: 'Copy text' },
+  PASTE: { key: 'v', ctrl: true, description: 'Paste text' },
+  UNDO: { key: 'z', ctrl: true, description: 'Undo last action' },
+  REDO: { key: 'y', ctrl: true, description: 'Redo last action' },
+  SEARCH: { key: 'f', ctrl: true, description: 'Search in document' },
+  HELP: { key: '/', ctrl: true, description: 'Show keyboard shortcuts' },
+} as const;
+
+// Helper function to format shortcut display
+export const formatShortcut = (shortcut: Partial<KeyboardShortcut>): string => {
+  const parts: string[] = [];
+  
+  if (shortcut.ctrl) parts.push('Ctrl');
+  if (shortcut.alt) parts.push('Alt');
+  if (shortcut.shift) parts.push('Shift');
+  if (shortcut.meta) parts.push('Cmd');
+  
+  if (shortcut.key) {
+    parts.push(shortcut.key.toUpperCase());
+  }
+  
+  return parts.join(' + ');
+};

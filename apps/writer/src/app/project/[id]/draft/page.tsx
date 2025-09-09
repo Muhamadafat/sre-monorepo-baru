@@ -16,6 +16,8 @@ const ActivityLog = dynamic(() => import("@/components/ActivityLog"), {
 });
 import NextImage from 'next/image';
 import { useActivityLog } from '@/hooks/useActivityLog';
+import { useDraftShortcuts } from '@/hooks/useDraftShortcuts';
+import { KeyboardShortcutsModal } from '@/components/KeyboardShortcutsModal';
 import {
   AppShell,
   Burger,
@@ -98,6 +100,7 @@ import {
    IconVideo,
    IconMicrophone,
    IconClipboardCheck,
+   IconKeyboard,
    IconStethoscope,
    IconPercentage,
    IconTrendingUp,
@@ -265,6 +268,7 @@ export default function Home() {
 
   // State untuk draft
   const [draftTitle, setDraftTitle] = useState('');
+  const [shortcutsModalOpened, setShortcutsModalOpened] = useState(false);
   const [draftContent, setDraftContent] = useState('');
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [draftProgress, setDraftProgress] = useState(0);
@@ -1768,21 +1772,52 @@ const handleSubmitToTeacher = async () => {
       return;
     }
 
+    if (!editorRef.current) {
+      notifications.show({
+        title: "Editor tidak tersedia",
+        message: "Editor belum siap untuk menyimpan",
+        color: "yellow",
+      });
+      return;
+    }
+
     setIsDraftSaving(true);
     try {
-      // Simulate API call to save draft
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Get content from editor
+      const contentBlocks = editorRef.current.getEditor().document;
+      const wordCount = editorRef.current.getWordCount();
+
+      // Call the actual save API
+      const response = await fetch('/api/draft/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          writerSessionId: id, // project ID from URL params
+          title: draftTitle,
+          contentBlocks,
+          wordCount,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save draft');
+      }
+
+      const result = await response.json();
       
       notifications.show({
         title: "Draft Tersimpan",
-        message: `Draft "${draftTitle}" berhasil disimpan`,
+        message: `Draft "${draftTitle}" berhasil disimpan dengan ${result.sectionsCount} bagian`,
         color: "green",
       });
       
       // Log to activity
-      logSave(`Draft artikel "${draftTitle}" telah disimpan`);
+      logSave(`Draft artikel "${draftTitle}" telah disimpan (${wordCount} kata, ${result.sectionsCount} bagian)`);
       
     } catch (error) {
+      console.error('Save error:', error);
       notifications.show({
         title: "Gagal Menyimpan",
         message: "Terjadi kesalahan saat menyimpan draft",
@@ -1792,6 +1827,27 @@ const handleSubmitToTeacher = async () => {
       setIsDraftSaving(false);
     }
   };
+
+  // Keyboard shortcuts integration
+  const { isSaving } = useDraftShortcuts({
+    onSave: saveDraft,
+    onNewDraft: () => {
+      // Reset draft state for new draft
+      setDraftTitle('');
+      if (editorRef.current) {
+        const editor = editorRef.current.getEditor();
+        // Clear editor content by replacing with empty paragraph
+        editor.replaceBlocks(editor.document, [
+          {
+            type: "paragraph",
+            content: "",
+          },
+        ]);
+      }
+    },
+    onShowHelp: () => setShortcutsModalOpened(true),
+    enabled: true,
+  });
 
   const startWriting = () => {
     console.log('🚀 Starting to write...');
@@ -2535,6 +2591,18 @@ const handleSubmitToTeacher = async () => {
                 </ActionIcon>
               </Tooltip>
             
+              <Tooltip label="Keyboard Shortcuts (Ctrl + /)">
+                <ActionIcon 
+                  variant="light" 
+                  color="blue" 
+                  size="lg" 
+                  onClick={() => setShortcutsModalOpened(true)}
+                  suppressHydrationWarning
+                >
+                  <IconKeyboard size={18} />
+                </ActionIcon>
+              </Tooltip>
+
               <Tooltip label="Settings">
                 <ActionIcon variant="light" color="gray" size="lg" suppressHydrationWarning>
                   <IconSettings size={18} />
@@ -6526,6 +6594,13 @@ ${topic} merupakan skill yang sangat valuable dalam dunia teknologi modern. Deng
           onExport={exportLog}
         />
       )}
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        opened={shortcutsModalOpened}
+        onClose={() => setShortcutsModalOpened(false)}
+      />
+
     </AppShell>
   );
 }

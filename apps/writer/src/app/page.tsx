@@ -45,6 +45,8 @@ import {
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { useRouter } from 'next/navigation';
 import { eventBus } from '@sre-monorepo/lib';
+import { useDraftShortcuts } from '@/hooks/useDraftShortcuts';
+import { KeyboardShortcutsModal } from '@/components/KeyboardShortcutsModal';
 
 interface BrainstormingProject {
   id: string;
@@ -72,6 +74,7 @@ export default function ProjectDashboard() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<BrainstormingProject | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [shortcutsModalOpened, setShortcutsModalOpened] = useState(false);
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
@@ -284,6 +287,13 @@ export default function ProjectDashboard() {
     });
     eventBus.emit('articleDeleted');
   }
+
+  // Keyboard shortcuts integration
+  useDraftShortcuts({
+    onNewDraft: () => setCreateModalOpen(true),
+    onShowHelp: () => setShortcutsModalOpened(true),
+    enabled: true,
+  });
 
   const [selectedProject, setSelectedProject] = useState<BrainstormingProject | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -834,6 +844,12 @@ export default function ProjectDashboard() {
           </Stack>
         )}
       </Modal>
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        opened={shortcutsModalOpened}
+        onClose={() => setShortcutsModalOpened(false)}
+      />
       </DashboardLayout>
     </Container>
   );

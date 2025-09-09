@@ -40,6 +40,7 @@ import {
 } from "@mantine/core";
 import { useClickOutside, useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
+import { useTextFormattingShortcuts } from "@/hooks/useTextFormattingShortcuts";
 import {
   IconAlertTriangle,
   IconArrowBackUp,
@@ -634,6 +635,49 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           return "";
         }
       },
+    });
+
+    // Text formatting shortcuts integration
+    useTextFormattingShortcuts({
+      onBold: () => {
+        editor.toggleStyles({ bold: true });
+      },
+      onItalic: () => {
+        editor.toggleStyles({ italic: true });
+      },
+      onUnderline: () => {
+        editor.toggleStyles({ underline: true });
+      },
+      onStrikethrough: () => {
+        editor.toggleStyles({ strike: true });
+      },
+      onCode: () => {
+        editor.toggleStyles({ code: true });
+      },
+      onHeading: (level: number) => {
+        editor.updateBlock(editor.getTextCursorPosition().block, {
+          type: "heading",
+          props: { level },
+        });
+      },
+      onBulletList: () => {
+        editor.updateBlock(editor.getTextCursorPosition().block, {
+          type: "bulletListItem",
+        });
+      },
+      onNumberedList: () => {
+        editor.updateBlock(editor.getTextCursorPosition().block, {
+          type: "numberedListItem",
+        });
+      },
+      onQuote: () => {
+        editor.updateBlock(editor.getTextCursorPosition().block, {
+          type: "paragraph",
+          // @ts-ignore - BlockNote may have different quote implementation
+          props: { backgroundColor: "gray" },
+        });
+      },
+      enabled: true,
     });
 
     // Check if undo/redo is available
