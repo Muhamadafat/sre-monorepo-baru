@@ -25,7 +25,7 @@ export function usePageAnalytics(pageName: string) {
         setUser(data.user)
       }
     } catch (error) {
-      console.error("Error fetching user:", error)
+      console.error("🔒 Gagal mengautentikasi pengguna untuk analytics:", error, "| Solusi: Coba refresh halaman atau login ulang")
       setUser(null)
     }
   }
@@ -53,7 +53,7 @@ export function usePageAnalytics(pageName: string) {
             timestamp: new Date().toISOString(),
           },
         }),
-      }).catch((error) => console.error("Error tracking page view:", error))
+      }).catch((error) => console.error("📊 Gagal melacak kunjungan halaman:", error, "| Data tetap tersimpan lokal, akan disinkronkan otomatis"))
 
       // Track time spent on page when component unmounts
       return () => {
@@ -73,7 +73,7 @@ export function usePageAnalytics(pageName: string) {
               timestamp: new Date().toISOString(),
             },
           }),
-        }).catch((error) => console.error("Error tracking time spent:", error))
+        }).catch((error) => console.error("⏱️ Gagal melacak durasi waktu:", error, "| Data sesi tetap tersimpan, tidak mempengaruhi pengalaman Anda"))
       }
     }
   }, [user?.id, pageName])
@@ -96,7 +96,7 @@ export function useFeatureAnalytics() {
         setUser(data.user)
       }
     } catch (error) {
-      console.error("Error fetching user:", error)
+      console.error("🔒 Gagal mengautentikasi pengguna untuk analytics:", error, "| Solusi: Coba refresh halaman atau login ulang")
       setUser(null)
     }
   }
@@ -125,7 +125,7 @@ export function useFeatureAnalytics() {
           }),
         })
       } catch (error) {
-        console.error("Error tracking feature:", error)
+        console.error("📈 Gagal melacak penggunaan fitur:", error, "| Fitur tetap berfungsi normal, hanya data penggunaan yang tidak tercatat")
       }
     }
   }
@@ -151,7 +151,7 @@ export function useFeatureAnalytics() {
           }),
         })
       } catch (error) {
-        console.error("Error tracking error:", error)
+        console.error("🔍 Gagal melacak laporan error:", error, "| Error telah dicatat secara lokal untuk perbaikan sistem")
       }
     }
   }

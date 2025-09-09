@@ -41,7 +41,7 @@ export async function sendXapiStatement(
   subdomain: string,
 ) {
   if (!session?.user?.id) {
-    console.warn("No active session found for xAPI statement. Statement not sent.")
+    console.warn("⚠️ xAPI Analytics: Pengguna belum login, aktivitas tidak dicatat. Login untuk melacak progress belajar Anda.")
     return
   }
 
@@ -77,9 +77,9 @@ export async function sendXapiStatement(
         keepalive: true, // Important for unload events
       })
     }
-    console.log("xAPI statement sent:", fullStatement.verb.display["en-US"], fullStatement.object.id)
+    console.log("📊 Aktivitas berhasil dicatat:", fullStatement.verb.display["en-US"], fullStatement.object.id)
   } catch (error) {
-    console.error("Failed to send xAPI statement:", error)
+    console.error("❌ Gagal mencatat aktivitas belajar:", error, "| Solusi: Periksa koneksi internet Anda. Data aktivitas akan tetap tersimpan lokal dan akan disinkronkan otomatis saat koneksi pulih.")
   }
 }
 

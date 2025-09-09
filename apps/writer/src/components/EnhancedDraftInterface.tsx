@@ -25,8 +25,11 @@ import {
   IconList,
   IconPlus,
   IconBulb,
-  IconMagic,
+  IconWand,
   IconRocket,
+  IconEdit,
+  IconX,
+  IconCheck,
 } from "@tabler/icons-react"
 import { StatusIndicator } from "@sre-monorepo/components"
 import { notifications } from "@mantine/notifications"
@@ -95,9 +98,10 @@ export function EnhancedDraftInterface() {
   const generateWithAI = useCallback(async (template: AITemplate, userTopic: string) => {
     if (!userTopic.trim()) {
       notifications.show({
-        title: "Topik Required",
-        message: "Silakan masukkan topik artikel terlebih dahulu",
-        color: "orange"
+        title: "Topik artikel diperlukan",
+        message: "Silakan masukkan topik artikel yang ingin Anda tulis. Contoh: 'Machine Learning untuk Analisis Data' atau 'Pengaruh Teknologi terhadap Pendidikan'",
+        color: "orange",
+        icon: <IconBulb size={16} />
       })
       return
     }
@@ -142,14 +146,17 @@ export function EnhancedDraftInterface() {
       notifications.show({
         title: "Draft Berhasil Dibuat!",
         message: `Draft "${userTopic}" telah selesai dengan referensi lengkap`,
-        color: "green"
+        color: "green",
+        icon: <IconCheck size={16} />
       })
 
     } catch (error) {
+      console.error('Draft generation error:', error)
       notifications.show({
-        title: "Gagal Generate Draft",
-        message: "Terjadi kesalahan saat membuat draft. Coba lagi.",
-        color: "red"
+        title: "Gagal membuat draft artikel",
+        message: "Terjadi kesalahan saat membuat draft. Langkah perbaikan: 1) Periksa koneksi internet Anda, 2) Pastikan topik tidak terlalu panjang, 3) Coba refresh halaman dan ulangi",
+        color: "red",
+        icon: <IconX size={16} />
       })
     } finally {
       setIsGenerating(false)
@@ -213,9 +220,10 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
   const handleQuickGenerate = () => {
     if (!topic.trim()) {
       notifications.show({
-        title: "Topik Required", 
-        message: "Masukkan topik artikel dulu ya!",
-        color: "orange"
+        title: "Topik artikel diperlukan", 
+        message: "Silakan masukkan topik artikel di kolom input terlebih dahulu. Topik yang jelas akan menghasilkan draft yang lebih baik.",
+        color: "orange",
+        icon: <IconBulb size={16} />
       })
       return
     }
@@ -236,7 +244,7 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
           <Text size="xl" fw={700} c="blue">Tulis Draft Artikel</Text>
           <Text c="dimmed">Buat draft artikel berdasarkan referensi dengan AI Magic! ✨</Text>
         </div>
-      </Grid>
+      </Group>
 
       {/* Input Section */}
       <TextInput

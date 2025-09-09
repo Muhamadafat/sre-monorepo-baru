@@ -524,6 +524,7 @@ export default function Home() {
   const [aiCheckResult, setAiCheckResult] = useState<AICheckResult | null>(
     null
   ); // Hasil AI detection
+  const [showAIIndicators, setShowAIIndicators] = useState(false); // Kontrol tampilan indikator warna AI
   const [assignmentCode, setAssignmentCode] = useState("");
 
   const [
@@ -542,6 +543,7 @@ export default function Home() {
   // Activity log hook
   const {
     activities,
+    addActivity,
     clearAll: clearActivityLog,
     exportLog,
     logFormula,
@@ -550,6 +552,19 @@ export default function Home() {
     logTransform,
     logError,
   } = useActivityLog();
+
+  // Fungsi khusus untuk kembali ke revisi dengan mempertahankan indikator
+  const handleBackToRevision = useCallback(() => {
+    setShowAIIndicators(true); // Pastikan indikator tetap tampil
+    closeAIResultModal(); // Tutup modal
+    
+    // Tambah aktivitas ke log
+    addActivity({
+      action: 'revision_mode',
+      description: 'Kembali ke mode revisi dengan indikator AI tetap aktif',
+      details: `Persentase AI: ${aiCheckResult?.percentage}%`
+    });
+  }, [aiCheckResult, closeAIResultModal, addActivity]);
 
   useEffect(() => {
     bibliographyListRef.current = bibliographyList;
@@ -2006,6 +2021,7 @@ const handleSubmitToTeacher = async () => {
       setScanningProgress(80);
 
       setAiCheckResult(result);
+      setShowAIIndicators(true); // Aktifkan indikator warna AI
       openAIResultModal();
 
       setScanningProgress(100);
@@ -2959,6 +2975,96 @@ const handleSubmitToTeacher = async () => {
                             isFromBrainstorming={isFromBrainstorming}
                             nodesData={article} 
                           />
+                          
+                          {/* AI Detection Indicators Overlay */}
+                          {showAIIndicators && aiCheckResult && !isScanning && (
+                            <Box
+                              style={{
+                                position: "absolute",
+                                top: 10,
+                                right: 10,
+                                zIndex: 9999, // Tingkatkan z-index agar di atas slash menu
+                                pointerEvents: "auto",
+                              }}
+                            >
+                              <Badge
+                                variant="filled"
+                                color={aiCheckResult.percentage > 80 ? "red" : aiCheckResult.percentage > 50 ? "orange" : "yellow"}
+                                size="lg"
+                                style={{
+                                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+                                  cursor: "pointer",
+                                  border: "2px solid white",
+                                  fontSize: "12px",
+                                  minWidth: "80px",
+                                }}
+                                onClick={() => openAIResultModal()}
+                              >
+                                <Group gap={4}>
+                                  <IconRobot size={14} />
+                                  <Text size="xs" fw={600}>
+                                    AI: {aiCheckResult.percentage}%
+                                  </Text>
+                                </Group>
+                              </Badge>
+                              <Group justify="center" gap={4} mt={4}>
+                                <Text 
+                                  size="xs" 
+                                  c="dimmed" 
+                                  style={{
+                                    background: computedColorScheme === 'dark' ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '10px'
+                                  }}
+                                >
+                                  Indikator aktif
+                                </Text>
+                                <ActionIcon
+                                  size="xs"
+                                  variant="subtle"
+                                  color="gray"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowAIIndicators(false);
+                                  }}
+                                  title="Sembunyikan indikator AI"
+                                >
+                                  <IconX size={10} />
+                                </ActionIcon>
+                              </Group>
+                            </Box>
+                          )}
+                          
+                          {/* Alternative AI Indicator (Bottom Right) - Backup jika yang atas tertutup */}
+                          {showAIIndicators && aiCheckResult && !isScanning && (
+                            <Box
+                              style={{
+                                position: "absolute",
+                                bottom: 20,
+                                right: 20,
+                                zIndex: 9999,
+                                pointerEvents: "auto",
+                              }}
+                            >
+                              <Badge
+                                variant="light"
+                                color={aiCheckResult.percentage > 80 ? "red" : aiCheckResult.percentage > 50 ? "orange" : "yellow"}
+                                size="sm"
+                                style={{
+                                  cursor: "pointer",
+                                  opacity: 0.8,
+                                }}
+                                onClick={() => openAIResultModal()}
+                                title={`AI Detection: ${aiCheckResult.percentage}% - Klik untuk detail`}
+                              >
+                                <Group gap={2}>
+                                  <Text size="xs">🤖 {aiCheckResult.percentage}%</Text>
+                                </Group>
+                              </Badge>
+                            </Box>
+                          )}
+                          
                           {isScanning && (
                             /* Scanning Overlay */
                             <Box
@@ -6145,7 +6251,7 @@ ${topic} merupakan skill yang sangat valuable dalam dunia teknologi modern. Deng
                       radius="md"
                       px={32}
                       leftSection={<IconEdit size={18} />}
-                      onClick={closeAIResultModal}
+                      onClick={handleBackToRevision}
                       style={{
                         background: "linear-gradient(135deg, #007BFF, #0056b3)",
                         boxShadow: "0 4px 16px rgba(0, 123, 255, 0.3)",

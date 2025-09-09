@@ -133,7 +133,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const { data: {user}, error } = await supabase.auth.getUser();
 
       if (!user || error) {
-        return resolve(NextResponse.json({error: 'Unauthorized'}, {status: 401}));
+        return resolve(NextResponse.json({
+          error: 'Sesi Anda telah berakhir', 
+          message: 'Silakan login kembali untuk melanjutkan upload dokumen',
+          troubleshooting: [
+            'Refresh halaman dan login ulang',
+            'Pastikan koneksi internet stabil',
+            'Hapus cookies browser jika masalah berlanjut'
+          ]
+        }, {status: 401}));
       }
 
       const userId = user.id;
@@ -150,6 +158,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         if (uploadError){
           console.error("Upload gagal:", uploadError.message);
+          return resolve(NextResponse.json({
+            error: 'Gagal mengunggah file PDF',
+            message: 'File PDF tidak dapat disimpan ke server',
+            troubleshooting: [
+              'Pastikan file PDF tidak rusak atau corrupt',
+              'Coba kompres file PDF jika ukuran terlalu besar (maksimal 10MB)',
+              'Pastikan koneksi internet stabil dan coba lagi'
+            ]
+          }, {status: 500}));
         };
 
         const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(uploadFileName);
@@ -192,7 +209,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         if (!mcpResponse.ok) {
             const errorBody = await mcpResponse.text();
             console.error("DEBUG: Python server returned an error status:", mcpResponse.status, errorBody);
-            throw new Error(`Python server failed for node generation/vector DB: ${mcpResponse.status} ${errorBody}`);
+            throw new Error('Gagal memproses dokumen dengan AI. Sistem analisis dokumen sedang mengalami gangguan sementara.');
         }
 
         const pythonResult = await mcpResponse.json();
@@ -216,7 +233,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         if (!rawPythonResultString) {
             // This case means the structure was not as expected
             console.error("DEBUG: Unexpected structure of Python result:", pythonResult.result);
-            throw new Error("Python returned an unexpected result structure.");
+            throw new Error('Proses analisis dokumen gagal. Sistem tidak dapat mengekstrak informasi dari PDF Anda.');
         }
 
         const parsedPythonResult = JSON.parse(rawPythonResultString);
@@ -233,7 +250,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 
         if (!generatedArticleNodeData) {
-            throw new Error("Python did not return article node data.");
+            throw new Error('AI tidak dapat menganalisis konten dokumen. PDF mungkin tidak berisi teks yang dapat dibaca atau format tidak didukung.');
         }
 
         const parentNode = await prisma.node.create({
@@ -485,8 +502,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         reject(
           NextResponse.json(
             {
-              message: "Processing failed",
-              error: err instanceof Error ? err.message : "Unknown error",
+              error: "Gagal memproses dokumen PDF",
+              message: err instanceof Error ? err.message : "Terjadi kesalahan tidak terduga saat memproses dokumen",
+              troubleshooting: [
+                "Pastikan file PDF tidak corrupt dan dapat dibuka dengan normal",
+                "Coba upload file PDF lain untuk memastikan sistem berjalan",
+                "Tunggu beberapa saat dan coba lagi, mungkin server sedang sibuk",
+                "Hubungi support jika masalah terus berlanjut"
+              ]
             },
             { status: 500 }
           )
@@ -495,7 +518,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
 
     if (!req.body) {
-      return resolve(NextResponse.json({ message: "No file data" }, { status: 400 }));
+      return resolve(NextResponse.json({ 
+        error: "File tidak ditemukan",
+        message: "Tidak ada file yang diunggah. Silakan pilih file PDF terlebih dahulu",
+        troubleshooting: [
+          "Pastikan Anda sudah memilih file PDF",
+          "Coba drag & drop file ke area upload",
+          "Periksa ukuran file tidak melebihi batas maksimal"
+        ]
+      }, { status: 400 }));
     }
 
     // Convert Web ReadableStream to Node.js Readable stream

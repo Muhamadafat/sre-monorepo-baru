@@ -6,7 +6,8 @@
       "Bash(taskkill:*)",
       "Bash(cmd /c:*)",
       "Bash(npm run dev:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Read(//c/Users/asus/Downloads/sre-monorepo-backup/apps/writer/src/components/**)"
     ],
     "deny": [],
     "ask": []

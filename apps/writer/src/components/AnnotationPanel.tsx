@@ -38,7 +38,9 @@ import {
   IconTrash,
   IconExternalLink,
   IconNote,
-  IconNotebook
+  IconNotebook,
+  IconCheck,
+  IconX
 } from '@tabler/icons-react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -131,10 +133,11 @@ export default function AnnotationPanel({ sessionId }: { sessionId?: string }) {
     } catch (error) {
       console.error('❌ Error fetching annotations:', error);
       notifications.show({
-        title: 'Error',
-        message: 'Gagal memuat daftar anotasi',
+        title: 'Tidak dapat memuat catatan',
+        message: 'Gagal memuat daftar anotasi Anda. Langkah perbaikan: 1) Periksa koneksi internet, 2) Refresh halaman ini, 3) Jika masalah berlanjut, coba logout dan login kembali',
         color: 'red',
         position: 'top-right',
+        icon: <IconSquareRoundedX size={16} />
       });
     } finally {
       setLoading(false);
@@ -218,10 +221,11 @@ export default function AnnotationPanel({ sessionId }: { sessionId?: string }) {
 
       if (res.ok) {
         notifications.show({
-          title: 'Berhasil',
-          message: 'Anotasi berhasil dihapus',
+          title: 'Catatan berhasil dihapus',
+          message: 'Anotasi telah dihapus dari koleksi Anda',
           color: 'green',
           position: 'top-right',
+          icon: <IconCheck size={16} />
         });
         await fetchAnnotations();
       } else {
@@ -230,10 +234,11 @@ export default function AnnotationPanel({ sessionId }: { sessionId?: string }) {
     } catch (error) {
       console.error('Delete error:', error);
       notifications.show({
-        title: 'Gagal',
-        message: 'Gagal menghapus anotasi',
+        title: 'Gagal menghapus catatan',
+        message: 'Tidak dapat menghapus anotasi. Langkah perbaikan: 1) Periksa koneksi internet Anda, 2) Refresh halaman dan coba lagi, 3) Pastikan Anda memiliki akses untuk menghapus catatan ini',
         color: 'red',
         position: 'top-right',
+        icon: <IconX size={16} />
       });
     } finally {
       setDeletingId(null);

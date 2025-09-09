@@ -754,10 +754,11 @@ export default function ChatPanel({
       console.log("File Uploaded:", data)
     } catch (error: any) {
       notifications.show({
-        title: "Upload Gagal",
-        message: error.message || "Terjadi Kesalahan saat upload",
+        title: "Gagal mengunggah dokumen",
+        message: "Dokumen PDF tidak dapat diunggah. Pastikan file tidak rusak dan koneksi internet stabil, lalu coba lagi",
         color: "red",
         position: "top-right",
+        icon: <IconX size={16} />
       })
       console.error("File upload error:", error)
     } finally {
@@ -1286,10 +1287,11 @@ export default function ChatPanel({
     } catch (error: any) {
       console.error("Error saving annotation:", error)
       notifications.show({
-        title: "Gagal",
-        message: error.message || "Terjadi kesalahan saat menyimpan anotasi.",
+        title: "Gagal menyimpan catatan",
+        message: "Catatan Anda tidak dapat disimpan. Pastikan koneksi internet stabil dan coba lagi",
         color: "red",
         position: "top-right",
+        icon: <IconX size={16} />
       })
     } finally {
       setIsSavingAnnotation(false)
