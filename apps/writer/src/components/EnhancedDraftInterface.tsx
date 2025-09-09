@@ -16,6 +16,8 @@ import {
   Textarea,
   Alert,
   Divider,
+  Tooltip,
+  HoverCard,
 } from "@mantine/core"
 import {
   IconSparkles,
@@ -30,9 +32,14 @@ import {
   IconEdit,
   IconX,
   IconCheck,
+  IconTrash,
+  IconHelp,
+  IconInfoCircle,
 } from "@tabler/icons-react"
 import { StatusIndicator } from "@sre-monorepo/components"
 import { notifications } from "@mantine/notifications"
+import { modals } from "@mantine/modals"
+import { useMantineTheme, useMantineColorScheme } from "@mantine/core"
 
 interface AITemplate {
   id: string
@@ -84,6 +91,10 @@ const AI_TEMPLATES: AITemplate[] = [
 ]
 
 export function EnhancedDraftInterface() {
+  const theme = useMantineTheme()
+  const { colorScheme } = useMantineColorScheme()
+  const isDark = colorScheme === 'dark'
+  
   const [topic, setTopic] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<AITemplate | null>(null)
@@ -98,10 +109,12 @@ export function EnhancedDraftInterface() {
   const generateWithAI = useCallback(async (template: AITemplate, userTopic: string) => {
     if (!userTopic.trim()) {
       notifications.show({
-        title: "Topik artikel diperlukan",
-        message: "Silakan masukkan topik artikel yang ingin Anda tulis. Contoh: 'Machine Learning untuk Analisis Data' atau 'Pengaruh Teknologi terhadap Pendidikan'",
+        title: "📝 Input Diperlukan",
+        message: `Sepertinya topik artikel belum diisi!\n\n💡 Tips untuk topik yang baik:\n• Gunakan 3-10 kata yang spesifik\n• Contoh: "Machine Learning untuk Analisis Data"\n• Hindari topik yang terlalu umum\n\n✍️ Silakan isi topik di kolom input di atas, lalu coba lagi!`,
         color: "orange",
-        icon: <IconBulb size={16} />
+        icon: <IconBulb size={16} />,
+        autoClose: 6000,
+        style: { whiteSpace: 'pre-line' }
       })
       return
     }
@@ -152,11 +165,54 @@ export function EnhancedDraftInterface() {
 
     } catch (error) {
       console.error('Draft generation error:', error)
+      
+      // Enhanced user-friendly error handling
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network')
+      const isTimeoutError = errorMessage.includes('timeout')
+      
+      let title = "🚫 Oops! Ada Kendala Teknis"
+      let message = ""
+      let troubleshootingSteps = []
+      
+      if (isNetworkError) {
+        title = "🌐 Koneksi Internet Bermasalah"
+        message = "Sepertinya ada masalah dengan koneksi internet Anda."
+        troubleshootingSteps = [
+          "🔄 Periksa koneksi internet Anda",
+          "📶 Pastikan sinyal WiFi/data stabil", 
+          "⏱️ Tunggu beberapa saat lalu coba lagi",
+          "🔃 Refresh halaman jika perlu"
+        ]
+      } else if (isTimeoutError) {
+        title = "⏰ Proses Memakan Waktu Lama"
+        message = "AI sedang sibuk, mohon bersabar sebentar."
+        troubleshootingSteps = [
+          "⏳ Tunggu 30-60 detik lalu coba lagi",
+          "📝 Coba topik yang lebih sederhana",
+          "🔄 Refresh halaman untuk reset"
+        ]
+      } else {
+        title = "⚠️ Terjadi Kesalahan Sistem"
+        message = "Jangan khawatir, ini bukan salah Anda!"
+        troubleshootingSteps = [
+          "🔄 Coba lagi dalam beberapa saat",
+          "📝 Pastikan topik tidak terlalu panjang (max 100 karakter)",
+          "🌐 Periksa koneksi internet Anda",
+          "🔃 Refresh halaman untuk memulai ulang",
+          "💡 Gunakan topik yang lebih spesifik"
+        ]
+      }
+      
+      const troubleshootingText = troubleshootingSteps.join('\n')
+      
       notifications.show({
-        title: "Gagal membuat draft artikel",
-        message: "Terjadi kesalahan saat membuat draft. Langkah perbaikan: 1) Periksa koneksi internet Anda, 2) Pastikan topik tidak terlalu panjang, 3) Coba refresh halaman dan ulangi",
+        title,
+        message: `${message}\n\n📋 Langkah Perbaikan:\n${troubleshootingText}`,
         color: "red",
-        icon: <IconX size={16} />
+        icon: <IconX size={16} />,
+        autoClose: 8000, // Longer display time
+        style: { whiteSpace: 'pre-line' } // Support line breaks
       })
     } finally {
       setIsGenerating(false)
@@ -220,10 +276,12 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
   const handleQuickGenerate = () => {
     if (!topic.trim()) {
       notifications.show({
-        title: "Topik artikel diperlukan", 
-        message: "Silakan masukkan topik artikel di kolom input terlebih dahulu. Topik yang jelas akan menghasilkan draft yang lebih baik.",
+        title: "📝 Input Diperlukan",
+        message: `Sepertinya topik artikel belum diisi!\n\n💡 Tips untuk topik yang baik:\n• Gunakan 3-10 kata yang spesifik\n• Contoh: "Machine Learning untuk Analisis Data"\n• Hindari topik yang terlalu umum\n\n✍️ Silakan isi topik di kolom input di atas, lalu coba lagi!`,
         color: "orange",
-        icon: <IconBulb size={16} />
+        icon: <IconBulb size={16} />,
+        autoClose: 6000,
+        style: { whiteSpace: 'pre-line' }
       })
       return
     }
@@ -233,33 +291,167 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
     generateWithAI(defaultTemplate, topic)
   }
 
+  const handleClearAll = () => {
+    modals.openConfirmModal({
+      title: (
+        <Text size="lg" fw={600} c="red">
+          🗑️ Konfirmasi Bersihkan Data
+        </Text>
+      ),
+      children: (
+        <Stack gap="md">
+          <Text size="sm">
+            Apakah Anda yakin ingin menghapus semua data berikut?
+          </Text>
+          <Card withBorder p="md" bg="red.0">
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>• Input topik artikel</Text>
+              <Text size="sm" fw={500}>• Draft yang telah dibuat</Text>
+              <Text size="sm" fw={500}>• Progress dan waktu</Text>
+            </Stack>
+          </Card>
+          <Alert color="orange" icon={<IconBulb size={16} />}>
+            <Text size="xs">
+              Data yang dihapus tidak dapat dikembalikan. Pastikan Anda telah menyimpan draft penting.
+            </Text>
+          </Alert>
+        </Stack>
+      ),
+      labels: { confirm: 'Ya, Bersihkan', cancel: 'Batal' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => {
+        setTopic("")
+        setGeneratedContent("")
+        setCurrentStage("")
+        setProgress(0)
+        setTimeElapsed(0)
+        setTimeRemaining(0)
+        
+        notifications.show({
+          title: "Berhasil dibersihkan",
+          message: "Semua input dan output telah dikosongkan",
+          color: "green",
+          icon: <IconCheck size={16} />
+        })
+      }
+    })
+  }
+
   return (
-    <Card shadow="sm" radius="lg" withBorder p="xl">
+    <Card 
+      shadow="lg" 
+      radius="xl" 
+      withBorder 
+      p="xl"
+      style={{
+        background: isDark 
+          ? `linear-gradient(135deg, ${theme.colors.dark[6]} 0%, ${theme.colors.dark[7]} 100%)`
+          : `linear-gradient(135deg, ${theme.colors.blue[0]} 0%, ${theme.colors.cyan[0]} 100%)`,
+        borderColor: isDark ? theme.colors.dark[4] : theme.colors.blue[2]
+      }}
       {/* Header */}
       <Group gap="md" mb="xl">
-        <ThemeIcon size="xl" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>
+        <ThemeIcon 
+          size="xl" 
+          variant="gradient" 
+          gradient={{ from: 'blue', to: 'cyan' }}
+          style={{
+            boxShadow: theme.shadows.md,
+            border: `2px solid ${theme.colors.blue[1]}`
+          }}
+        >
           <IconSparkles size={32} />
         </ThemeIcon>
-        <div>
-          <Text size="xl" fw={700} c="blue">Tulis Draft Artikel</Text>
-          <Text c="dimmed">Buat draft artikel berdasarkan referensi dengan AI Magic! ✨</Text>
+        <div style={{ flex: 1 }}>
+          <Group gap="xs" align="center">
+            <Text 
+              size="xl" 
+              fw={700} 
+              variant="gradient"
+              gradient={{ from: 'blue', to: 'cyan' }}
+            >
+              Tulis Draft Artikel
+            </Text>
+            <HoverCard width={320} shadow="md" position="bottom">
+              <HoverCard.Target>
+                <IconInfoCircle size={20} color={theme.colors.blue[5]} style={{ cursor: 'help' }} />
+              </HoverCard.Target>
+              <HoverCard.Dropdown>
+                <Stack gap="xs">
+                  <Text size="sm" fw={600}>💡 Tentang Fitur Draft</Text>
+                  <Text size="xs">
+                    • <strong>AI Magic Buttons</strong>: Generate draft otomatis dengan AI
+                  </Text>
+                  <Text size="xs">
+                    • <strong>Template Sistem</strong>: Pilih struktur artikel sesuai kebutuhan
+                  </Text>
+                  <Text size="xs">
+                    • <strong>Progress Tracking</strong>: Monitor proses pembuatan draft
+                  </Text>
+                  <Text size="xs">
+                    • <strong>Preview & Edit</strong>: Lihat dan edit hasil sebelum digunakan
+                  </Text>
+                </Stack>
+              </HoverCard.Dropdown>
+            </HoverCard>
+          </Group>
+          <Text 
+            c={isDark ? 'dimmed' : 'gray.6'}
+            style={{ 
+              fontStyle: 'italic',
+              letterSpacing: '0.5px'
+            }}
+          >
+            Buat draft artikel berdasarkan referensi dengan AI Magic! ✨
+          </Text>
         </div>
       </Group>
 
       {/* Input Section */}
-      <TextInput
-        size="lg"
-        placeholder="Masukkan topik artikel... (contoh: Machine Learning untuk Analisis Data)"
-        value={topic}
-        onChange={(e) => setTopic(e.currentTarget.value)}
-        mb="xl"
-        styles={{
-          input: {
-            fontSize: '16px',
-            padding: '12px 16px'
-          }
-        }}
-      />
+      <Group align="flex-end" mb="xl">
+        <TextInput
+          size="lg"
+          placeholder="Masukkan topik artikel... (contoh: Machine Learning untuk Analisis Data)"
+          value={topic}
+          onChange={(e) => setTopic(e.currentTarget.value)}
+          styles={{
+            input: {
+              fontSize: '16px',
+              padding: '12px 16px',
+              background: isDark 
+                ? `linear-gradient(135deg, ${theme.colors.dark[5]} 0%, ${theme.colors.dark[4]} 100%)`
+                : `linear-gradient(135deg, ${theme.colors.gray[0]} 0%, ${theme.colors.blue[0]} 100%)`,
+              border: `2px solid ${isDark ? theme.colors.dark[3] : theme.colors.blue[2]}`,
+              borderRadius: theme.radius.md,
+              transition: 'all 0.3s ease',
+              '&:focus': {
+                borderColor: theme.colors.blue[5],
+                boxShadow: `0 0 0 3px ${theme.colors.blue[1]}`,
+                transform: 'translateY(-1px)'
+              }
+            }
+          }}
+          style={{ flex: 1 }}
+        />
+        <Button
+          size="lg"
+          variant="gradient"
+          gradient={{ from: 'red.6', to: 'red.8' }}
+          onClick={handleClearAll}
+          disabled={isGenerating}
+          title="Bersihkan input dan output"
+          style={{
+            boxShadow: theme.shadows.sm,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: theme.shadows.md
+            }
+          }}
+        >
+          <IconTrash size={20} />
+        </Button>
+      </Group>
 
       {/* Tips */}
       <Alert icon={<IconBulb size={16} />} color="yellow" mb="xl">
@@ -268,54 +460,202 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
         </Text>
       </Alert>
 
-      {/* AI MAGIC BUTTONS - INI YANG KURANG! */}
-      <Card withBorder p="md" bg="blue.0" mb="xl">
-        <Text fw={600} mb="md" c="blue">🤖 AI MAGIC BUTTONS:</Text>
+      {/* AI TOOLS SECTION - Enhanced Visibility */}
+      <Card 
+        withBorder 
+        p="xl" 
+        mb="xl"
+        style={{
+          background: isDark
+            ? `linear-gradient(135deg, ${theme.colors.dark[4]} 0%, ${theme.colors.blue[8]} 15%, ${theme.colors.purple[8]} 30%, ${theme.colors.dark[4]} 100%)`
+            : `linear-gradient(135deg, ${theme.colors.blue[0]} 0%, ${theme.colors.cyan[0]} 25%, ${theme.colors.purple[0]} 50%, ${theme.colors.blue[1]} 100%)`,
+          borderColor: isDark ? theme.colors.blue[6] : theme.colors.blue[4],
+          borderWidth: '3px',
+          borderRadius: theme.radius.xl,
+          boxShadow: isDark 
+            ? `0 8px 32px ${theme.colors.blue[8]}40` 
+            : `0 8px 32px ${theme.colors.blue[2]}`,
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Decorative elements */}
+        <div style={{
+          position: 'absolute',
+          top: '-50px',
+          right: '-50px',
+          width: '100px',
+          height: '100px',
+          background: `linear-gradient(45deg, ${theme.colors.cyan[3]}20, ${theme.colors.blue[3]}20)`,
+          borderRadius: '50%',
+          zIndex: 0
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '-30px',
+          left: '-30px',
+          width: '60px',
+          height: '60px',
+          background: `linear-gradient(45deg, ${theme.colors.purple[3]}20, ${theme.colors.blue[3]}20)`,
+          borderRadius: '50%',
+          zIndex: 0
+        }} />
+        
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <Group gap="md" align="center" mb="lg">
+            <ThemeIcon 
+              size="xl" 
+              variant="gradient" 
+              gradient={{ from: 'blue', to: 'purple' }}
+              style={{
+                boxShadow: `0 4px 16px ${theme.colors.blue[3]}`,
+                border: `2px solid ${theme.colors.cyan[2]}`
+              }}
+            >
+              <IconWand size={28} />
+            </ThemeIcon>
+            <div>
+              <Text 
+                fw={800} 
+                variant="gradient"
+                gradient={{ from: 'blue.6', to: 'purple.6' }}
+                style={{ 
+                  fontSize: '24px', 
+                  letterSpacing: '1px',
+                  textShadow: isDark ? `0 2px 4px ${theme.colors.dark[8]}` : 'none'
+                }}
+              >
+                🤖 AI TOOLS
+              </Text>
+              <Text 
+                size="sm" 
+                c={isDark ? 'gray.4' : 'gray.6'}
+                fw={500}
+                style={{ letterSpacing: '0.5px' }}
+              >
+                Powered by Artificial Intelligence
+              </Text>
+            </div>
+            <div style={{ marginLeft: 'auto' }}>
+              <Text 
+                size="xs" 
+                fw={600}
+                variant="gradient"
+                gradient={{ from: 'cyan', to: 'blue' }}
+                style={{
+                  padding: '4px 8px',
+                  background: isDark ? theme.colors.dark[5] : theme.colors.blue[0],
+                  borderRadius: theme.radius.sm,
+                  border: `1px solid ${theme.colors.blue[3]}`
+                }}
+              >
+                ✨ BETA
+              </Text>
+            </div>
+          </Group>
+        </div>
         
         <Grid>
           <Grid.Col span={{ base: 12, md: 4 }}>
-            <Button
-              fullWidth
-              size="lg"
-              variant="gradient"
-              gradient={{ from: 'blue', to: 'cyan' }}
-              onClick={handleQuickGenerate}
-              loading={isGenerating}
-              title="Generate draft artikel dengan AI cepat"
+            <Tooltip 
+              label="🚀 Generate Cepat: Buat draft dengan template default dalam hitungan detik"
+              position="bottom"
+              withArrow
+              multiline
+              width={200}
             >
-              <IconRocket size={24} />
-            </Button>
+              <Button
+                fullWidth
+                size="lg"
+                variant="gradient"
+                gradient={{ from: 'blue.6', to: 'cyan.6' }}
+                onClick={handleQuickGenerate}
+                loading={isGenerating}
+                title="Generate draft artikel dengan AI cepat"
+                style={{
+                  height: '60px',
+                  borderRadius: theme.radius.lg,
+                  boxShadow: `0 4px 15px ${theme.colors.blue[2]}`,
+                  border: `2px solid ${theme.colors.blue[1]}`,
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    transform: 'translateY(-3px)',
+                    boxShadow: `0 8px 25px ${theme.colors.blue[3]}`
+                  }
+                }}
+              >
+                <IconRocket size={32} />
+              </Button>
+            </Tooltip>
           </Grid.Col>
           
           <Grid.Col span={{ base: 12, md: 4 }}>
-            <Button
-              fullWidth
-              size="lg"
-              variant="light"
-              color="green"
-              onClick={() => setShowTemplateModal(true)}
-              disabled={isGenerating}
-              title="Pilih template AI untuk draft artikel"
+            <Tooltip 
+              label="📋 Template Custom: Pilih struktur artikel yang sesuai (Akademis, Outline, Heavy Citation)"
+              position="bottom"
+              withArrow
+              multiline
+              width={220}
             >
-              <IconTemplate size={24} />
-            </Button>
+              <Button
+                fullWidth
+                size="lg"
+                variant="gradient"
+                gradient={{ from: 'green.5', to: 'green.7' }}
+                onClick={() => setShowTemplateModal(true)}
+                disabled={isGenerating}
+                title="Pilih template AI untuk draft artikel"
+                style={{
+                  height: '60px',
+                  borderRadius: theme.radius.lg,
+                  boxShadow: `0 4px 15px ${theme.colors.green[2]}`,
+                  border: `2px solid ${theme.colors.green[1]}`,
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    transform: 'translateY(-3px)',
+                    boxShadow: `0 8px 25px ${theme.colors.green[3]}`
+                  }
+                }}
+              >
+                <IconTemplate size={32} />
+              </Button>
+            </Tooltip>
           </Grid.Col>
           
           <Grid.Col span={{ base: 12, md: 4 }}>
-            <Button
-              fullWidth
-              size="lg"
-              variant="light"
-              color="purple"
-              onClick={() => {
-                const refTemplate = AI_TEMPLATES.find(t => t.id === 'auto-reference')!
-                generateWithAI(refTemplate, topic)
-              }}
-              disabled={isGenerating || !topic.trim()}
-              title="Auto-Draft dari referensi pustaka dengan AI"
+            <Tooltip 
+              label="🧠 Auto-Reference: Generate draft otomatis berdasarkan referensi pustaka yang tersedia"
+              position="bottom"
+              withArrow
+              multiline
+              width={240}
             >
-              <IconBrain size={24} />
-            </Button>
+              <Button
+                fullWidth
+                size="lg"
+                variant="gradient"
+                gradient={{ from: 'purple.5', to: 'purple.7' }}
+                onClick={() => {
+                  const refTemplate = AI_TEMPLATES.find(t => t.id === 'auto-reference')!
+                  generateWithAI(refTemplate, topic)
+                }}
+                disabled={isGenerating || !topic.trim()}
+                title="Auto-Draft dari referensi pustaka dengan AI"
+                style={{
+                  height: '60px',
+                  borderRadius: theme.radius.lg,
+                  boxShadow: `0 4px 15px ${theme.colors.purple[2]}`,
+                  border: `2px solid ${theme.colors.purple[1]}`,
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    transform: 'translateY(-3px)',
+                    boxShadow: `0 8px 25px ${theme.colors.purple[3]}`
+                  }
+                }}
+              >
+                <IconBrain size={32} />
+              </Button>
+            </Tooltip>
           </Grid.Col>
         </Grid>
       </Card>
@@ -351,37 +691,85 @@ ${topic} merupakan area yang memerlukan penelitian lebih lanjut. Rekomendasi unt
           </Card>
           
           <Group mt="md" justify="flex-end">
-            <Button 
-              variant="light" 
-              title="Gunakan draft ini untuk menulis"
-            >
-              <IconPlus size={16} />
-            </Button>
-            <Button 
-              variant="outline"
-              title="Edit draft sebelum digunakan"
-            >
-              <IconEdit size={16} />
-            </Button>
+            <Tooltip label="✅ Gunakan draft ini untuk menulis" withArrow>
+              <Button 
+                variant="light" 
+                color="green"
+                style={{ 
+                  width: '50px', 
+                  height: '40px', 
+                  borderRadius: theme.radius.md 
+                }}
+                title="Gunakan draft ini untuk menulis"
+              >
+                <IconCheck size={20} />
+              </Button>
+            </Tooltip>
+            <Tooltip label="✏️ Edit draft sebelum digunakan" withArrow>
+              <Button 
+                variant="outline"
+                color="blue"
+                style={{ 
+                  width: '50px', 
+                  height: '40px', 
+                  borderRadius: theme.radius.md 
+                }}
+                title="Edit draft sebelum digunakan"
+              >
+                <IconEdit size={20} />
+              </Button>
+            </Tooltip>
           </Group>
         </Card>
       )}
 
       <Divider my="xl" />
 
-      {/* Manual Tools - Existing ones */}
+      {/* Manual Tools - Enhanced dengan penjelasan */}
       <div>
-        <Text fw={600} mb="md" c="gray">Manual Tools:</Text>
+        <Group gap="xs" align="center" mb="md">
+          <Text fw={600} c="gray">Manual Tools</Text>
+          <Tooltip label="Tools manual untuk editing artikel tanpa AI" withArrow>
+            <IconInfoCircle size={16} color={theme.colors.gray[5]} style={{ cursor: 'help' }} />
+          </Tooltip>
+        </Group>
         <Group>
-          <Button variant="light" leftSection={<IconPlus size={16} />}>
-            + Tambah Paragraf
-          </Button>
-          <Button variant="light" leftSection={<IconQuote size={16} />}>
-            " Sisipkan Kutipan
-          </Button>
-          <Button variant="light" leftSection={<IconList size={16} />}>
-            - Daftar Poin
-          </Button>
+          <Tooltip label="➕ Tambah paragraf baru di posisi cursor" withArrow>
+            <Button 
+              variant="light" 
+              style={{ 
+                width: '50px', 
+                height: '50px', 
+                borderRadius: theme.radius.md 
+              }}
+            >
+              <IconPlus size={24} />
+            </Button>
+          </Tooltip>
+          <Tooltip label="📝 Sisipkan kutipan dari referensi pustaka" withArrow>
+            <Button 
+              variant="light" 
+              style={{ 
+                width: '50px', 
+                height: '50px', 
+                borderRadius: theme.radius.md 
+              }}
+            >
+              <IconQuote size={24} />
+            </Button>
+          </Tooltip>
+          <Tooltip label="📋 Buat daftar poin atau bullet points" withArrow>
+            <Button 
+              variant="light" 
+              style={{ 
+                width: '50px', 
+                height: '50px', 
+                borderRadius: theme.radius.md 
+              }}
+            >
+              <IconList size={24} />
+            </Button>
+          </Tooltip>
         </Group>
       </div>
 

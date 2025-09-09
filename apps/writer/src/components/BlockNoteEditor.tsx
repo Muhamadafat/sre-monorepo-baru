@@ -70,7 +70,7 @@ import Katex from "react-katex";
 const LaTeXModal = React.lazy(() => import("./LaTeXModal"));
 
 // Types
-interface HeadingInfo {
+interface JudulInfo {
   text: string;
   level: number;
   position: number;
@@ -78,11 +78,11 @@ interface HeadingInfo {
 }
 
 interface CursorContext {
-  targetHeading: HeadingInfo | null;
-  headingContent: string;
+  targetJudul: JudulInfo | null;
+  judulContent: string;
   insertPosition: number;
-  isAtHeading: boolean;
-  contextType: 'heading' | 'under_heading' | 'paragraph' | 'list' | 'general';
+  isAtJudul: boolean;
+  contextType: 'judul' | 'under_judul' | 'paragraph' | 'list' | 'general';
   currentText: string;
   precedingContext: string;
 }
@@ -172,6 +172,17 @@ interface UndoRedoState {
   history: Block[][];
   currentIndex: number;
   maxHistorySize: number;
+}
+
+// AI Activity Log
+interface AIActivityLog {
+  id: string;
+  timestamp: Date;
+  type: 'structure' | 'content' | 'sentence';
+  prompt: string;
+  action: string;
+  success: boolean;
+  duration: number;
 }
 
 // Template interfaces - Fixed to include all required properties
@@ -494,6 +505,34 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       currentIndex: -1,
       maxHistorySize: 50,
     });
+
+    // AI Activity Log State
+    const [aiActivityLog, setAIActivityLog] = React.useState<AIActivityLog[]>([]);
+
+    // Function to log AI activities
+    const logAIActivity = useCallback((
+      type: 'structure' | 'content' | 'sentence',
+      prompt: string,
+      action: string,
+      success: boolean,
+      duration: number
+    ) => {
+      const newLog: AIActivityLog = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: new Date(),
+        type,
+        prompt: prompt.substring(0, 50) + (prompt.length > 50 ? '...' : ''),
+        action,
+        success,
+        duration
+      };
+
+      setAIActivityLog(prev => {
+        const updated = [newLog, ...prev];
+        // Keep only last 20 activities
+        return updated.slice(0, 20);
+      });
+    }, []);
 
     // Continue writing state
     const [continueState, setContinueState] = React.useState<ContinueWritingState>({
@@ -1259,7 +1298,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           progress: 0,
         }));
 
-        // Check if target block is a heading - if so, create new paragraph below it
+        // Check if target block is a judul - if so, create new paragraph below it
         if (targetBlock.type === "heading") {
           try {
             const newParagraphBlocks: PartialBlock[] = [{
@@ -1280,7 +1319,16 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
             }));
 
           } catch (error) {
-            console.error("Error creating paragraph block below heading:", error);
+            console.error("Error creating paragraph block below judul:", error);
+            
+            notifications.show({
+              title: "⚠️ Ada Kendala Teknis",
+              message: `Maaf, terjadi masalah saat menambahkan teks baru.\n\n📋 Solusi yang bisa dicoba:\n• 🔄 Coba klik di tempat lain lalu coba lagi\n• ⏱️ Tunggu sebentar lalu ulangi\n• 🔃 Refresh halaman jika masih bermasalah\n\n💡 Tip: Pastikan cursor berada di posisi yang tepat`,
+              color: "red",
+              icon: <IconX size={16} />,
+              autoClose: 6000,
+              style: { whiteSpace: 'pre-line' }
+            });
             resolve();
             return;
           }
@@ -1365,13 +1413,15 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       // Allow mock generation even without API key for development
       console.log("🚀 Starting AI generation with progress:", { userPrompt, type, behavior, hasModel: !!aiModel });
 
+      const startTime = Date.now();
+      
       try {
         setAIProgressState(prev => ({
           ...prev,
           isLoading: true,
           progress: 0,
           stage: "Memulai...",
-          startTime: Date.now(),
+          startTime: startTime,
         }));
 
         // Start progress simulation
@@ -1401,10 +1451,31 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
         // Give a moment for UI to update
         await new Promise(resolve => setTimeout(resolve, 100));
 
+        // Log successful AI activity
+        const duration = Date.now() - startTime;
+        logAIActivity(
+          type as 'structure' | 'content' | 'sentence',
+          userPrompt || `Auto ${type}`,
+          `Generated ${type} content`,
+          true,
+          duration
+        );
+
         console.log("Returning generated text:", !!generatedText);
         return generatedText;
       } catch (error) {
         console.error("AI generation failed:", error);
+        
+        // Log failed AI activity
+        const duration = Date.now() - startTime;
+        logAIActivity(
+          type as 'structure' | 'content' | 'sentence',
+          userPrompt || `Auto ${type}`,
+          `Failed to generate ${type}`,
+          false,
+          duration
+        );
+
         setAIProgressState(prev => ({
           ...prev,
           isLoading: false,
@@ -1447,8 +1518,8 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           if (currentIndex > 0 && allBlocks[currentIndex - 1].type === "heading" &&
             aiStreamingState.originalText === "") {
             editor.removeBlocks([aiStreamingState.currentBlock]);
-            const headingBlock = allBlocks[currentIndex - 1];
-            editor.setTextCursorPosition(headingBlock, "end");
+            const judulBlock = allBlocks[currentIndex - 1];
+            editor.setTextCursorPosition(judulBlock, "end");
           } else {
             editor.updateBlock(aiStreamingState.currentBlock, {
               type: aiStreamingState.currentBlock.type as "paragraph" | "heading" | "bulletListItem" | "numberedListItem",
@@ -1566,7 +1637,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
         // Don't show if AI is streaming
         if (aiStreamingState.isStreaming || aiStreamingState.showControls) return false;
 
-        // Allow continue button for headings (untuk generate content)
+        // Allow continue button for judul (untuk generate content)
         if (block.type === "heading") {
           return true;
         }
@@ -1603,13 +1674,13 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       }
     }, [extractTextFromBlock, aiStreamingState.isStreaming, aiStreamingState.showControls]);
 
-    // Find matching heading
-    const findMatchingHeading = (blocks: Block[], headingText: string, level: number, startIndex: number): number => {
+    // Find matching judul
+    const findMatchingJudul = (blocks: Block[], judulText: string, level: number, startIndex: number): number => {
       for (let i = startIndex; i < blocks.length; i++) {
         const block = blocks[i];
         if (block.type === "heading" && (block.props as { level?: number })?.level === level) {
           const blockText = extractTextFromBlock(block);
-          if (blockText === headingText) {
+          if (blockText === judulText) {
             return i;
           }
         }
@@ -1783,21 +1854,21 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
 
         // Check if cursor is on a heading
         if (currentBlock.type === "heading") {
-          const headingText = extractTextFromBlock(currentBlock);
+          const judulText = extractTextFromBlock(currentBlock);
 
-          if (headingText) {
+          if (judulText) {
             const level = (currentBlock.props as { level?: number })?.level || 1;
             return {
-              targetHeading: {
-                text: headingText,
+              targetJudul: {
+                text: judulText,
                 level: level,
                 position: currentIndex,
                 block: currentBlock
               },
-              headingContent: "",
+              judulContent: "",
               insertPosition: currentIndex,
-              isAtHeading: true,
-              contextType: 'heading',
+              isAtJudul: true,
+              contextType: 'judul',
               currentText,
               precedingContext: precedingContext.trim()
             };
@@ -1807,16 +1878,16 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
         // Check if cursor is in a list item
         if (currentBlock.type === "bulletListItem" || currentBlock.type === "numberedListItem") {
           // Find governing heading
-          let governingHeading: HeadingInfo | null = null;
+          let governingJudul: JudulInfo | null = null;
 
           for (let i = currentIndex - 1; i >= 0; i--) {
             const block = allBlocks[i];
             if (block.type === "heading") {
-              const headingText = extractTextFromBlock(block);
-              if (headingText) {
+              const judulText = extractTextFromBlock(block);
+              if (judulText) {
                 const level = (block.props as { level?: number })?.level || 1;
-                governingHeading = {
-                  text: headingText,
+                governingJudul = {
+                  text: judulText,
                   level: level,
                   position: i,
                   block: block
@@ -1827,10 +1898,10 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           }
 
           return {
-            targetHeading: governingHeading,
-            headingContent: "",
+            targetJudul: governingJudul,
+            judulContent: "",
             insertPosition: currentIndex,
-            isAtHeading: false,
+            isAtJudul: false,
             contextType: 'list',
             currentText,
             precedingContext: precedingContext.trim()
@@ -1840,29 +1911,29 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
         // ENHANCED: Check if cursor is in a regular paragraph
         if (currentBlock.type === "paragraph") {
           // Find governing heading
-          let governingHeading: HeadingInfo | null = null;
+          let governingJudul: JudulInfo | null = null;
           let headingContent = "";
-          let isDirectlyUnderHeading = false;
+          let isDirectlyUnderJudul = false;
 
-          // Check if this paragraph is DIRECTLY under a heading (no other paragraphs in between)
+          // Check if this paragraph is DIRECTLY under a judul (no other paragraphs in between)
           if (currentIndex > 0 && allBlocks[currentIndex - 1].type === "heading") {
-            isDirectlyUnderHeading = true;
+            isDirectlyUnderJudul = true;
           }
 
           for (let i = currentIndex - 1; i >= 0; i--) {
             const block = allBlocks[i];
             if (block.type === "heading") {
-              const headingText = extractTextFromBlock(block);
-              if (headingText) {
+              const judulText = extractTextFromBlock(block);
+              if (judulText) {
                 const level = (block.props as { level?: number })?.level || 1;
-                governingHeading = {
-                  text: headingText,
+                governingJudul = {
+                  text: judulText,
                   level: level,
                   position: i,
                   block: block
                 };
 
-                // Collect content under this heading (but skip current block to avoid duplication)
+                // Collect content under this judul (but skip current block to avoid duplication)
                 for (let j = i + 1; j < currentIndex; j++) {
                   const contentBlock = allBlocks[j];
                   const contentText = extractTextFromBlock(contentBlock);
@@ -1876,13 +1947,13 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           }
 
           // FIXED: If paragraph has content and is not empty, treat as regular paragraph continuation
-          // regardless of whether it's under a heading or not
+          // regardless of whether it's under a judul or not
           if (currentText && currentText.trim().length > 0) {
             return {
-              targetHeading: governingHeading,
-              headingContent: headingContent.trim(),
+              targetJudul: governingJudul,
+              judulContent: headingContent.trim(),
               insertPosition: currentIndex,
-              isAtHeading: false,
+              isAtJudul: false,
               contextType: 'paragraph', // Always treat as paragraph if it has content
               currentText,
               precedingContext: precedingContext.trim()
@@ -1890,11 +1961,11 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           } else {
             // Only treat as 'under_heading' if paragraph is empty and directly under heading
             return {
-              targetHeading: governingHeading,
-              headingContent: headingContent.trim(),
+              targetJudul: governingJudul,
+              judulContent: headingContent.trim(),
               insertPosition: currentIndex,
-              isAtHeading: false,
-              contextType: isDirectlyUnderHeading ? 'under_heading' : 'paragraph',
+              isAtJudul: false,
+              contextType: isDirectlyUnderJudul ? 'under_judul' : 'paragraph',
               currentText,
               precedingContext: precedingContext.trim()
             };
@@ -1903,10 +1974,10 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
 
         // General case
         return {
-          targetHeading: null,
-          headingContent: "",
+          targetJudul: null,
+          judulContent: "",
           insertPosition: currentIndex,
-          isAtHeading: false,
+          isAtJudul: false,
           contextType: 'general',
           currentText,
           precedingContext: precedingContext.trim()
@@ -1942,7 +2013,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
 
       // Different handling based on block type
       if (currentBlock.type === "heading") {
-        // For headings, original text is empty since we'll create new content below
+        // For judul, original text is empty since we'll create new content below
         originalText = "";
       } else if (currentBlock.type === "paragraph" ||
         currentBlock.type === "bulletListItem" ||
@@ -1985,15 +2056,15 @@ INSTRUKSI:
               break;
             }
 
-            const { contextType, currentText, precedingContext, targetHeading } = cursorContext;
+            const { contextType, currentText, precedingContext, targetJudul } = cursorContext;
 
             // Generate different prompts based on context type
             switch (contextType) {
-              case 'heading':
-                if (targetHeading) {
+              case 'judul':
+                if (targetJudul) {
                   systemPrompt = `Tulis konten untuk heading berikut. HANYA tulis isi konten paragraf, JANGAN tulis ulang headingnya.
 
-HEADING TARGET: ${targetHeading.text} (Level ${targetHeading.level})
+JUDUL TARGET: ${targetJudul.text} (Level ${targetJudul.level})
 
 INSTRUKSI:
 - Tulis 2-3 kalimat konten yang relevan untuk heading tersebut
@@ -2002,34 +2073,34 @@ INSTRUKSI:
 - Gunakan bahasa Indonesia yang natural dan informatif
 - Sesuaikan kedalaman konten dengan level judul
 
-TUGAS: Tulis konten detail untuk heading "${targetHeading.text}"`;
+TUGAS: Tulis konten detail untuk judul "${targetJudul.text}"`;
                 }
                 break;
 
-              case 'under_heading':
-                // This case is now only for EMPTY paragraphs directly under headings
-                if (targetHeading) {
+              case 'under_judul':
+                // This case is now only for EMPTY paragraphs directly under judul
+                if (targetJudul) {
                   systemPrompt = `Tulis konten untuk judul berikut yang masih kosong:
 
-JUDUL: ${targetHeading.text} (Level ${targetHeading.level})
+JUDUL: ${targetJudul.text} (Level ${targetJudul.level})
 
 KONTEKS DOKUMEN:
 ${precedingContext}
 
 INSTRUKSI:
-- Ini adalah paragraf kosong pertama di bawah judul "${targetHeading.text}"
+- Ini adalah paragraf kosong pertama di bawah judul "${targetJudul.text}"
 - Tulis 2-3 kalimat konten yang relevan untuk judul tersebut
 - Mulai langsung dengan konten paragraf yang informatif
 - Gunakan bahasa Indonesia yang natural dan professional
 - Sesuaikan kedalaman konten dengan level judul
 
-TUGAS: Buat konten pembuka untuk "${targetHeading.text}"`;
+TUGAS: Buat konten pembuka untuk "${targetJudul.text}"`;
                 }
                 break;
 
               case 'paragraph':
               case 'list':
-                // ENHANCED: This handles ALL non-empty paragraphs/lists (including those under headings)
+                // ENHANCED: This handles ALL non-empty paragraphs/lists (including those under judul)
                 let blockTypeDescription = "";
                 if (currentBlock.type === "bulletListItem") {
                   blockTypeDescription = "item list bullet";
@@ -2048,7 +2119,7 @@ ${precedingContext}
 
 TEKS SAAT INI (${blockTypeDescription}): ${currentText}
 
-${targetHeading ? `HEADING TERKAIT: ${targetHeading.text}` : ''}
+${targetJudul ? `JUDUL TERKAIT: ${targetJudul.text}` : ''}
 
 INSTRUKSI KHUSUS:
 - Lanjutkan langsung dari akhir teks saat ini: "${currentText}"
@@ -2058,7 +2129,7 @@ INSTRUKSI KHUSUS:
 - Jaga konsistensi tone dan style penulisan
 - Berikan kelanjutan yang logis dan bermakna
 - Sesuaikan dengan format ${blockTypeDescription}
-${targetHeading ? `- Pastikan relevan dengan heading "${targetHeading.text}"` : ''}
+${targetJudul ? `- Pastikan relevan dengan judul "${targetJudul.text}"` : ''}
 
 TUGAS: Lanjutkan ${blockTypeDescription} dengan natural mengikuti alur yang sudah ada`;
                 break;
@@ -2382,7 +2453,7 @@ INSTRUKSI:
       
       // Simplified context processing for mock responses
       let contextContent = "";
-      let existingHeadings: string[] = [];
+      let existingJudul: string[] = [];
       
       try {
         const editorBlocks = editor.document || [];
@@ -2397,7 +2468,7 @@ INSTRUKSI:
                 const level = (block.props as { level?: number })?.level || 1;
                 const headingPrefix = '#'.repeat(Math.min(level, 4));
                 contextContent += `\n${headingPrefix} ${text}\n`;
-                existingHeadings.push(text.trim());
+                existingJudul.push(text.trim());
               } else {
                 contextContent += `${text.substring(0, 200)}\n`; // Limit content length
               }
@@ -2409,7 +2480,7 @@ INSTRUKSI:
       } catch (contextError) {
         console.warn("Context processing error:", contextError);
         contextContent = "";
-        existingHeadings = [];
+        existingJudul = [];
       }
       
       const mockResponses = {
@@ -2454,7 +2525,7 @@ INSTRUKSI:
         content: contextContent ? 
           // If there's existing content, generate content for empty headings
           (() => {
-            const emptyHeadings = existingHeadings.filter(heading => {
+            const emptyJudul = existingJudul.filter(heading => {
               // Check if heading has content after it
               const headingRegex = new RegExp(`#{1,6}\\s+${heading}\\s*$`, 'm');
               const headingIndex = contextContent.search(headingRegex);
@@ -2468,19 +2539,19 @@ INSTRUKSI:
               return sectionContent.trim().length < 50; // Less than 50 chars = empty
             });
             
-            if (emptyHeadings.length > 0) {
+            if (emptyJudul.length > 0) {
               // Generate content for the first empty heading
-              const targetHeading = emptyHeadings[0];
-              return `Berdasarkan struktur yang sudah ada, berikut adalah konten untuk "${targetHeading}":
+              const targetJudul = emptyJudul[0];
+              return `Berdasarkan struktur yang sudah ada, berikut adalah konten untuk "${targetJudul}":
 
-${targetHeading.toLowerCase().includes('pendahuluan') ? `
+${targetJudul.toLowerCase().includes('pendahuluan') ? `
 Dalam era digital yang berkembang pesat, ${prompt} telah menjadi salah satu topik yang sangat relevan dan penting untuk dipahami. Konsep ${prompt} tidak hanya mencakup aspek teknis, tetapi juga melibatkan berbagai dimensi sosial, ekonomi, dan budaya yang saling berinteraksi.
 
 Pentingnya memahami ${prompt} dalam konteks modern tidak dapat diabaikan. Dengan kemajuan teknologi yang terus berlangsung, ${prompt} telah mengalami transformasi signifikan yang mempengaruhi cara kita bekerja, belajar, dan berinteraksi dengan dunia sekitar.
 
 Artikel ini akan memberikan panduan komprehensif tentang ${prompt}, mulai dari konsep dasar hingga implementasi praktis yang dapat diterapkan dalam kehidupan sehari-hari.` :
 
-targetHeading.toLowerCase().includes('konsep') ? `
+targetJudul.toLowerCase().includes('konsep') ? `
 ${prompt} secara fundamental dapat didefinisikan sebagai sebuah paradigma yang mengintegrasikan berbagai elemen teknologi, metodologi, dan praktik terbaik. Untuk memahami ${prompt} secara menyeluruh, kita perlu mempelajari beberapa komponen utama.
 
 **Definisi dan Terminologi**
@@ -2493,7 +2564,7 @@ Terdapat beberapa prinsip dasar yang menjadi landasan ${prompt}:
 - Keamanan dan reliability
 - User experience yang optimal` :
 
-targetHeading.toLowerCase().includes('implementasi') ? `
+targetJudul.toLowerCase().includes('implementasi') ? `
 Implementasi ${prompt} dalam praktik sehari-hari memerlukan pendekatan yang sistematis dan terstruktur. Berikut adalah panduan langkah demi langkah yang dapat diikuti.
 
 **Phase 1: Perencanaan dan Analisis**
@@ -2502,7 +2573,7 @@ Sebelum mengimplementasikan ${prompt}, penting untuk melakukan analisis mendalam
 **Phase 2: Development dan Testing**
 Tahap development merupakan fase eksekusi dari design yang telah dibuat. Proses ini melibatkan coding dan development berdasarkan best practices, testing yang comprehensive, dan quality assurance yang ketat.` :
 
-targetHeading.toLowerCase().includes('tantangan') ? `
+targetJudul.toLowerCase().includes('tantangan') ? `
 Implementasi ${prompt} tidak terlepas dari berbagai tantangan yang perlu diantisipasi dan diatasi. Tantangan-tantangan ini dapat dibagi menjadi beberapa kategori utama.
 
 **Tantangan Teknis**
@@ -2511,18 +2582,18 @@ Scalability issues merupakan salah satu tantangan utama, dimana system bottlenec
 **Tantangan Organisational** 
 Change management menjadi tantangan tersendiri karena adanya resistance terhadap perubahan dari team. Solusi yang efektif adalah comprehensive training program dan gradual transition dengan pendekatan agile methodology.` :
 
-targetHeading.toLowerCase().includes('kesimpulan') ? `
+targetJudul.toLowerCase().includes('kesimpulan') ? `
 ${prompt} represents a paradigm shift dalam cara kita approach technology solutions. Successful implementation requires careful planning, systematic execution, dan continuous improvement mindset.
 
 Key takeaways dari pembahasan ini mencakup understanding fundamental concepts yang crucial untuk success, practical implementation yang memerlukan structured approach, dan challenges yang dapat diatasi dengan proper planning dan execution.
 
 Melihat ke depan, ${prompt} akan terus berkembang dan memberikan opportunities baru untuk innovation dan growth. Organizations yang dapat effectively leverage ${prompt} akan memiliki competitive advantage yang significant.` :
 
-`Berdasarkan konteks "${targetHeading}" dalam topik ${prompt}, berikut adalah pembahasan yang mendalam:
+`Berdasarkan konteks "${targetJudul}" dalam topik ${prompt}, berikut adalah pembahasan yang mendalam:
 
 Aspek ini memiliki peran penting dalam keseluruhan pemahaman tentang ${prompt}. Untuk mengimplementasikan dengan sukses, diperlukan pendekatan yang sistematis dan pemahaman yang mendalam tentang berbagai faktor yang terlibat.
 
-Dalam praktiknya, ${targetHeading.toLowerCase()} dapat diterapkan melalui berbagai metodologi yang telah terbukti efektif. Best practices menunjukkan bahwa kombinasi antara teori dan praktik memberikan hasil yang optimal.
+Dalam praktiknya, ${targetJudul.toLowerCase()} dapat diterapkan melalui berbagai metodologi yang telah terbukti efektif. Best practices menunjukkan bahwa kombinasi antara teori dan praktik memberikan hasil yang optimal.
 
 Key considerations yang perlu diperhatikan meliputi aspek teknis, organisational, dan strategic yang saling berinteraksi untuk mencapai objectives yang diinginkan.`
 }`;
@@ -3145,9 +3216,9 @@ INSTRUKSI:
 
           if (headingMatch) {
             const level = headingMatch[1].length;
-            const headingText = headingMatch[2];
+            const judulText = headingMatch[2];
 
-            const matchingBlockIndex = findMatchingHeading(currentBlocks, headingText, level, currentBlockIndex);
+            const matchingBlockIndex = findMatchingJudul(currentBlocks, judulText, level, currentBlockIndex);
 
             if (matchingBlockIndex !== -1) {
               currentBlockIndex = matchingBlockIndex;
@@ -3254,11 +3325,11 @@ INSTRUKSI:
           const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
           if (headingMatch) {
             const level = Math.min(headingMatch[1].length, 3) as 1 | 2 | 3;
-            const headingText = headingMatch[2].trim();
+            const judulText = headingMatch[2].trim();
 
             blocksToInsert.push({
               type: "heading",
-              content: headingText,
+              content: judulText,
               props: { level },
             });
           }
@@ -3332,7 +3403,7 @@ INSTRUKSI:
                     }
                   }
 
-                  const headingBlock = allBlocks[headingIndex];
+                  const judulBlock = allBlocks[headingIndex];
 
                   // Find where to insert (RIGHT AFTER heading, not at the end of existing content)
                   let insertIndex = headingIndex; // Start from heading position
@@ -3996,6 +4067,49 @@ INSTRUKSI:
                       transition: 'width 0.3s ease'
                     }} />
                   </div>
+
+                {/* AI Activity Log Indicator */}
+                {aiActivityLog.length > 0 && (
+                  <Tooltip
+                    label={
+                      <Stack gap="xs">
+                        <Text size="xs" fw={600}>Log Aktivitas AI:</Text>
+                        {aiActivityLog.slice(0, 3).map((log) => (
+                          <Group key={log.id} gap="xs">
+                            <div style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              background: log.success ? '#10b981' : '#ef4444'
+                            }} />
+                            <Text size="xs">
+                              {log.type} • {log.duration}ms • {log.timestamp.toLocaleTimeString()}
+                            </Text>
+                          </Group>
+                        ))}
+                        {aiActivityLog.length > 3 && (
+                          <Text size="xs" c="dimmed">+{aiActivityLog.length - 3} lainnya</Text>
+                        )}
+                      </Stack>
+                    }
+                    position="top"
+                    withArrow
+                  >
+                    <div style={{
+                      padding: '4px 6px',
+                      borderRadius: '4px',
+                      background: computedColorScheme === "dark" 
+                        ? 'rgba(16, 185, 129, 0.1)' 
+                        : 'rgba(16, 185, 129, 0.05)',
+                      border: `1px solid ${computedColorScheme === "dark" ? "rgba(16, 185, 129, 0.2)" : "rgba(16, 185, 129, 0.1)"}`,
+                      cursor: 'pointer'
+                    }}>
+                      <Text size="xs" fw={600} c="green">
+                        AI: {aiActivityLog.length}
+                      </Text>
+                    </div>
+                  </Tooltip>
+                )}
                 </div>
 
                 {/* Quick save indicator */}
