@@ -1253,163 +1253,91 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
 
     // LaTeX Modal handlers
     const handleLatexInsert = useCallback((formula: string) => {
-      // Calculate the actual mathematical result and show ONLY the result
+      // Convert LaTeX to readable mathematical notation
       let finalText = "";
       
       try {
-        // Clean formula first
-        const cleanFormula = formula.trim();
-        
-        // Square root: √x
-        if (cleanFormula.includes("\\sqrt{") && cleanFormula.includes("}")) {
-          const match = cleanFormula.match(/\\sqrt\{(\d+(?:\.\d+)?)\}/);
-          if (match) {
-            const number = parseFloat(match[1]);
-            const result = Math.sqrt(number);
-            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
-          }
-        } 
-        // Power of 2: x^2
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^2$/)) {
-          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^2$/);
-          if (match) {
-            const number = parseFloat(match[1]);
-            const result = number * number;
-            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
-          }
-        } 
-        // Pythagorean theorem complete: a^2 + b^2 = c^2
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^2 \+ \d+(?:\.\d+)?\^2 = \d+(?:\.\d+)?\^2$/)) {
-          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^2 \+ (\d+(?:\.\d+)?)\^2 = (\d+(?:\.\d+)?)\^2$/);
-          if (match) {
-            const a = parseFloat(match[1]);
-            const b = parseFloat(match[2]);
-            const c = parseFloat(match[3]);
-            const leftSide = (a * a) + (b * b);
-            const rightSide = c * c;
-            const isCorrect = Math.abs(leftSide - rightSide) < 0.001;
-            finalText = `${leftSide} = ${rightSide} (${isCorrect ? 'Benar ✓' : 'Salah ✗'})`;
-          }
-        }
-        // Pythagorean theorem incomplete: a^2 + b^2 = [c]^2 (calculate c)
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^2 \+ \d+(?:\.\d+)?\^2 = \[c\]\^2$/)) {
-          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^2 \+ (\d+(?:\.\d+)?)\^2 = \[c\]\^2$/);
-          if (match) {
-            const a = parseFloat(match[1]);
-            const b = parseFloat(match[2]);
-            const cSquared = (a * a) + (b * b);
-            const c = Math.sqrt(cSquared);
-            finalText = `c = ${c % 1 === 0 ? c.toString() : c.toFixed(2)} (karena ${a}² + ${b}² = ${cSquared})`;
-          }
-        }
-        // Fraction: a/b or \frac{a}{b}
-        else if (cleanFormula.includes("\\frac{") && cleanFormula.includes("}{")) {
-          const match = cleanFormula.match(/\\frac\{(\d+(?:\.\d+)?)\}\{(\d+(?:\.\d+)?)\}/);
-          if (match) {
-            const num = parseFloat(match[1]);
-            const den = parseFloat(match[2]);
-            if (den !== 0) {
-              const result = num / den;
-              finalText = result % 1 === 0 ? result.toString() : result.toFixed(4);
-            } else {
-              finalText = "Error: Tidak boleh dibagi nol!";
-            }
-          }
-        } 
-        // Basic operations
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?\+\d+(?:\.\d+)?$/)) {
-          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\+(\d+(?:\.\d+)?)$/);
-          if (match) {
-            const a = parseFloat(match[1]);
-            const b = parseFloat(match[2]);
-            const result = a + b;
-            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
-          }
-        } 
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?\-\d+(?:\.\d+)?$/)) {
-          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\-(\d+(?:\.\d+)?)$/);
-          if (match) {
-            const a = parseFloat(match[1]);
-            const b = parseFloat(match[2]);
-            const result = a - b;
-            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
-          }
-        } 
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?\*\d+(?:\.\d+)?$/)) {
-          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\*(\d+(?:\.\d+)?)$/);
-          if (match) {
-            const a = parseFloat(match[1]);
-            const b = parseFloat(match[2]);
-            const result = a * b;
-            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
-          }
-        } 
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/)) {
-          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/);
-          if (match) {
-            const a = parseFloat(match[1]);
-            const b = parseFloat(match[2]);
-            if (b !== 0) {
-              const result = a / b;
-              finalText = result % 1 === 0 ? result.toString() : result.toFixed(4);
-            } else {
-              finalText = "Error: Tidak boleh dibagi nol!";
-            }
-          }
-        }
-        // Advanced operations with parentheses
-        else if (cleanFormula.includes("(") && cleanFormula.includes(")")) {
-          try {
-            // Handle formulas like (a+b)/2, (fahrenheit-32)*5/9, etc.
-            let evalFormula = cleanFormula.replace(/\[|\]/g, ""); // Remove brackets
-            
-            // Safety check - only allow numbers, basic operators, and parentheses
-            if (/^[\d\.\+\-\*\/\(\)\s]+$/.test(evalFormula)) {
-              const result = Function(`"use strict"; return (${evalFormula})`)();
-              finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
-            }
-          } catch (e) {
-            // Fall through to default handling
-          }
-        }
-        // Power operations (base^exponent)
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^\d+(?:\.\d+)?$/)) {
-          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^(\d+(?:\.\d+)?)$/);
-          if (match) {
-            const base = parseFloat(match[1]);
-            const exponent = parseFloat(match[2]);
-            const result = Math.pow(base, exponent);
-            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
-          }
-        }
-        // Cube operations (x^3)
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?\^3$/)) {
-          const match = cleanFormula.match(/^(\d+(?:\.\d+)?)\^3$/);
-          if (match) {
-            const number = parseFloat(match[1]);
-            const result = number * number * number;
-            finalText = result % 1 === 0 ? result.toString() : result.toFixed(2);
-          }
-        }
-        // Simple number
-        else if (cleanFormula.match(/^\d+(?:\.\d+)?$/)) {
-          finalText = cleanFormula;
-        }
-        
-        // If no calculation was possible, show helpful message
-        if (!finalText) {
-          finalText = `"${cleanFormula}" - Format tidak dikenali. Coba: 9^2, √16, 5+3, atau 3^2+4^2=5^2`;
+        // Convert LaTeX to readable mathematical notation
+        finalText = formula.trim()
+          // Cube roots (handle before square roots)
+          .replace(/\\sqrt\[3\]\{([^}]+)\}/g, '∛$1')
+          // Square roots
+          .replace(/\\sqrt\{([^}]+)\}/g, '√$1')
+          // Fractions
+          .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1÷$2')
+          // Powers (convert ^ to superscript notation)
+          .replace(/\^2/g, '²')
+          .replace(/\^3/g, '³')
+          .replace(/\^4/g, '⁴')
+          .replace(/\^5/g, '⁵')
+          .replace(/\^6/g, '⁶')
+          .replace(/\^7/g, '⁷')
+          .replace(/\^8/g, '⁸')
+          .replace(/\^9/g, '⁹')
+          .replace(/\^0/g, '⁰')
+          .replace(/\^1/g, '¹')
+          // For other numbers, keep the caret notation
+          .replace(/\^([0-9]+)/g, '^$1')
+          // Mathematical operators
+          .replace(/\*/g, '×')
+          .replace(/\//g, '÷')
+          // Constants (replace common decimal approximations)
+          .replace(/3\.14159/g, 'π')
+          .replace(/2\.71828/g, 'e')
+          // Remove any remaining backslashes
+          .replace(/\\/g, '');
+
+        // If the formula is empty after conversion, show helpful message
+        if (!finalText.trim()) {
+          finalText = "Formula kosong - Silakan masukkan formula matematika";
         }
       } catch (e) {
-        finalText = `Error: "${formula}" - Pastikan format benar (contoh: 5+3, √9, 2^2)`;
+        finalText = `Error: "${formula}" - Pastikan format LaTeX benar`;
       }
 
-      // Log the formula calculation
-      if (onLogFormula && !finalText.includes('Error:') && !finalText.includes('Format tidak dikenali')) {
+      // Log the formula insertion
+      if (onLogFormula && !finalText.includes('Error:')) {
         onLogFormula(formula, finalText);
       }
 
-      // Insert ONLY the calculated result
+      // Create enhanced formula display with multiple formats
+      const now = new Date();
+      const timestamp = now.toLocaleTimeString('id-ID', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+
+      // Determine the formula type for better presentation
+      let formulaIcon = "🧮";
+      let formulaCategory = "Umum";
+      
+      if (finalText.includes("√") || finalText.includes("∛")) {
+        formulaIcon = "√";
+        formulaCategory = "Akar";
+      } else if (finalText.includes("²") || finalText.includes("³") || finalText.includes("⁴") || finalText.includes("⁵")) {
+        formulaIcon = "🔢";
+        formulaCategory = "Pangkat";
+      } else if (finalText.includes("π") || finalText.includes("°")) {
+        formulaIcon = "🔵";
+        formulaCategory = "Geometri";
+      } else if (finalText.includes("÷") || finalText.includes("×") || finalText.includes("+") || finalText.includes("-")) {
+        formulaIcon = "⚡";
+        formulaCategory = "Operasi";
+      } else if (formula.includes("mean") || formula.includes("average")) {
+        formulaIcon = "📊";
+        formulaCategory = "Statistik";
+      } else if (formula.includes("celsius") || formula.includes("fahrenheit")) {
+        formulaIcon = "🌡️";
+        formulaCategory = "Konversi";
+      } else if (formula.includes("interest") || formula.includes("discount")) {
+        formulaIcon = "💰";
+        formulaCategory = "Keuangan";
+      }
+
+      // Create modern card-style formula display
+      const isComplexFormula = formula.includes("\\sqrt") || formula.includes("\\frac") || formula.includes("^");
+      
+      // Create CODE EDITOR style formula display (Dark Theme)
       editor.insertBlocks(
         [
           {
@@ -1417,11 +1345,168 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
             content: [
               {
                 type: "text",
+                text: "┌──────────────────────────────────────────────────┐",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
+                }
+              }
+            ],
+          },
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "│ ",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
+                }
+              },
+              {
+                type: "text",
+                text: "// " + formulaCategory + " Formula",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#10b981",
+                  italic: true
+                }
+              },
+              {
+                type: "text",
+                text: " │",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
+                }
+              }
+            ],
+          },
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "│ ",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
+                }
+              },
+              {
+                type: "text",
+                text: "result = ",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#f59e0b"
+                }
+              },
+              {
+                type: "text",
                 text: finalText,
                 styles: {
-                  backgroundColor: "#e6f3ff",
-                  textColor: "#0066cc",
+                  backgroundColor: "#1f2937",
+                  textColor: "#60a5fa",
                   bold: true
+                }
+              },
+              {
+                type: "text",
+                text: ";",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#9ca3af"
+                }
+              },
+              {
+                type: "text",
+                text: " │",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
+                }
+              }
+            ],
+          },
+          ...(isComplexFormula ? [{
+            type: "paragraph" as const,
+            content: [
+              {
+                type: "text" as const,
+                text: "│ ",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
+                }
+              },
+              {
+                type: "text" as const,
+                text: "// LaTeX: ",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#10b981",
+                  italic: true
+                }
+              },
+              {
+                type: "text" as const,
+                text: formula,
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#f472b6",
+                  italic: true
+                }
+              },
+              {
+                type: "text" as const,
+                text: " │",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
+                }
+              }
+            ],
+          }] : []),
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "│ ",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
+                }
+              },
+              {
+                type: "text",
+                text: "// Executed at " + timestamp,
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#10b981",
+                  italic: true
+                }
+              },
+              {
+                type: "text",
+                text: " │",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
+                }
+              }
+            ],
+          },
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "└──────────────────────────────────────────────────┘",
+                styles: {
+                  backgroundColor: "#1f2937",
+                  textColor: "#6b7280"
                 }
               }
             ],
