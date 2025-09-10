@@ -186,6 +186,15 @@ interface AIActivityLog {
   duration: number;
 }
 
+// Revision Indicators State
+interface RevisionIndicator {
+  blockId: string;
+  type: 'needs-review' | 'ai-generated' | 'modified' | 'suggested';
+  color: string;
+  timestamp: Date;
+  reason?: string;
+}
+
 // Template interfaces - Fixed to include all required properties
 interface AITemplate {
   title: string;
@@ -351,6 +360,57 @@ const animationStyles = `
     border-radius: 8px;
     padding: 4px;
     animation: fade-in 0.3s ease-out;
+  }
+
+  /* Revision Indicators Styles */
+  .revision-indicator {
+    position: relative;
+    padding-left: 16px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    margin: 4px 0;
+  }
+
+  .revision-indicator::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 2px;
+    animation: revision-pulse 2s ease-in-out infinite;
+  }
+
+  .revision-indicator.needs-review::before {
+    background: linear-gradient(180deg, #ff6b6b 0%, #ff5252 100%);
+    box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+  }
+
+  .revision-indicator.ai-generated::before {
+    background: linear-gradient(180deg, #4ecdc4 0%, #26a69a 100%);
+    box-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
+  }
+
+  .revision-indicator.modified::before {
+    background: linear-gradient(180deg, #45b7d1 0%, #2196f3 100%);
+    box-shadow: 0 0 10px rgba(69, 183, 209, 0.5);
+  }
+
+  .revision-indicator.suggested::before {
+    background: linear-gradient(180deg, #96ceb4 0%, #4caf50 100%);
+    box-shadow: 0 0 10px rgba(150, 206, 180, 0.5);
+  }
+
+  .revision-indicator:hover {
+    background: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateX(4px);
+  }
+
+  @keyframes revision-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
 
   .ai-progress-container {
@@ -569,6 +629,10 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       totalChunks: 0,
       currentChunk: 0,
     });
+    
+    // Revision Indicators State
+    const [revisionIndicators, setRevisionIndicators] = React.useState<RevisionIndicator[]>([]);
+    
     const streamingControlsRef = useClickOutside(() => {
       if (aiStreamingState.showControls && !aiStreamingState.isStreaming) {
         setAIStreamingState(prev => ({ ...prev, showControls: false }));
@@ -601,6 +665,56 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
         console.error("❌ Error initializing AI model:", error);
         return null;
       }
+    }, []);
+
+    // Revision Indicators Helper Functions
+    const addRevisionIndicator = React.useCallback((blockId: string, type: RevisionIndicator['type'], reason?: string) => {
+      const colors = {
+        'needs-review': '#ff6b6b', // Red for needs review
+        'ai-generated': '#4ecdc4', // Teal for AI generated
+        'modified': '#45b7d1', // Blue for modified
+        'suggested': '#96ceb4' // Green for suggested
+      };
+      
+      console.log(`📝 Adding revision indicator: ${type} for block ${blockId}`, { reason });
+      
+      setRevisionIndicators(prev => {
+        const newIndicators = [
+          ...prev.filter(indicator => indicator.blockId !== blockId),
+          {
+            blockId,
+            type,
+            color: colors[type],
+            timestamp: new Date(),
+            reason
+          }
+        ];
+        
+        console.log('📊 Current revision indicators:', newIndicators);
+        return newIndicators;
+      });
+    }, []);
+
+    const removeRevisionIndicator = React.useCallback((blockId: string) => {
+      setRevisionIndicators(prev => prev.filter(indicator => indicator.blockId !== blockId));
+    }, []);
+
+    const getBlockIndicator = React.useCallback((blockId: string) => {
+      return revisionIndicators.find(indicator => indicator.blockId === blockId);
+    }, [revisionIndicators]);
+
+    // Clear all revision indicators
+    const clearAllRevisionIndicators = React.useCallback(() => {
+      setRevisionIndicators([]);
+    }, []);
+
+    // Mark block as reviewed (remove needs-review indicator)
+    const markAsReviewed = React.useCallback((blockId: string) => {
+      setRevisionIndicators(prev => 
+        prev.filter(indicator => 
+          !(indicator.blockId === blockId && indicator.type === 'needs-review')
+        )
+      );
     }, []);
 
     // BlockNote Editor setup with history tracking
@@ -692,6 +806,107 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     // Enhanced undo/redo state management
     const isUndoRedoOperation = React.useRef(false);
     const lastSavedContent = React.useRef<string>("");
+
+    // Apply revision indicators to DOM elements
+    React.useEffect(() => {
+      const applyRevisionIndicators = () => {
+        console.log('🎨 Applying revision indicators:', revisionIndicators);
+        
+        // Remove existing indicators first
+        document.querySelectorAll('.revision-indicator').forEach(el => {
+          el.classList.remove('revision-indicator', 'needs-review', 'ai-generated', 'modified', 'suggested');
+        });
+
+        // Apply current indicators
+        revisionIndicators.forEach(indicator => {
+          console.log(`🔍 Looking for block: [data-id="${indicator.blockId}"]`);
+          
+          // Try multiple selectors to find the block (avoid direct ID selector for invalid CSS)
+          let blockElement = document.querySelector(`[data-id="${indicator.blockId}"]`) || 
+                           document.querySelector(`[data-block-id="${indicator.blockId}"]`);
+          
+          // Also try to find by content wrapper
+          if (!blockElement) {
+            const allBlocks = document.querySelectorAll('[data-content-type="blockContainer"]');
+            allBlocks.forEach(block => {
+              const blockId = block.getAttribute('data-id') || block.id;
+              if (blockId === indicator.blockId) {
+                blockElement = block;
+              }
+            });
+          }
+          
+          if (blockElement) {
+            console.log('✅ Found block element:', blockElement);
+            blockElement.classList.add('revision-indicator', indicator.type);
+            
+            // Add inline styles as backup with proper type casting
+            const htmlElement = blockElement as HTMLElement;
+            htmlElement.style.position = 'relative';
+            htmlElement.style.paddingLeft = '16px';
+            
+            // Create or update the indicator pseudo-element with real element
+            let indicator_bar = blockElement.querySelector('.revision-bar') as HTMLElement;
+            if (!indicator_bar) {
+              indicator_bar = document.createElement('div');
+              indicator_bar.className = 'revision-bar';
+              blockElement.insertBefore(indicator_bar, blockElement.firstChild);
+            }
+            
+            // Style the bar based on type
+            const colors = {
+              'needs-review': '#ff6b6b',
+              'ai-generated': '#4ecdc4', 
+              'modified': '#45b7d1',
+              'suggested': '#96ceb4'
+            };
+            
+            indicator_bar.style.cssText = `
+              position: absolute !important;
+              left: -12px !important;
+              top: 0 !important;
+              bottom: 0 !important;
+              width: 6px !important;
+              height: 100% !important;
+              background: ${colors[indicator.type]} !important;
+              border-radius: 3px !important;
+              box-shadow: 0 0 15px ${colors[indicator.type]} !important;
+              z-index: 9999 !important;
+              animation: revision-pulse 2s ease-in-out infinite !important;
+              pointer-events: none !important;
+            `;
+            
+            // Also add background to parent for extra visibility
+            htmlElement.style.borderLeft = `4px solid ${colors[indicator.type]}`;
+            htmlElement.style.boxShadow = `inset 4px 0 0 ${colors[indicator.type]}40`;
+            
+            // Add tooltip with revision reason
+            if (indicator.reason) {
+              blockElement.setAttribute('title', indicator.reason);
+            }
+            
+            console.log(`🎨 Applied ${indicator.type} indicator to block`);
+          } else {
+            console.warn(`❌ Block element not found for ID: ${indicator.blockId}`);
+          }
+        });
+      };
+
+      // Apply indicators with multiple attempts to catch DOM updates
+      const timeoutId = setTimeout(applyRevisionIndicators, 100);
+      const intervalId = setInterval(applyRevisionIndicators, 500);
+      
+      // Cleanup after 5 seconds
+      const cleanupId = setTimeout(() => {
+        clearInterval(intervalId);
+      }, 5000);
+      
+      return () => {
+        clearTimeout(timeoutId);
+        clearInterval(intervalId);
+        clearTimeout(cleanupId);
+      };
+    }, [revisionIndicators, editor.document]);
 
     // Save state to history for undo/redo with deduplication
     const saveToHistory = useCallback((blocks: Block[]) => {
@@ -1538,6 +1753,15 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
 
     // Accept AI content
     const acceptAIContent = () => {
+      // Mark accepted AI content with indicator
+      if (aiStreamingState.currentBlock) {
+        addRevisionIndicator(
+          aiStreamingState.currentBlock.id, 
+          'ai-generated', 
+          'Konten dihasilkan AI - diterima'
+        );
+      }
+      
       setAIStreamingState({
         isStreaming: false,
         streamedText: "",
@@ -1570,6 +1794,13 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
               content: aiStreamingState.originalText,
             });
             editor.setTextCursorPosition(aiStreamingState.currentBlock, "end");
+            
+            // Add revision indicator to mark this block as needing review
+            addRevisionIndicator(
+              aiStreamingState.currentBlock.id, 
+              'needs-review', 
+              'Konten AI dibatalkan - perlu direvisi'
+            );
           }
 
         } catch (error) {
@@ -2084,7 +2315,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
 
       try {
         let systemPrompt = "";
-        const maxTokens = 150; // Reduced for continuation
+        const maxTokens = 300; // Increased for longer continuation
 
         switch (action) {
           case "continue":
@@ -2111,10 +2342,11 @@ INSTRUKSI:
 JUDUL TARGET: ${targetJudul.text} (Level ${targetJudul.level})
 
 INSTRUKSI:
-- Tulis 2-3 kalimat konten yang relevan untuk heading tersebut
+- Tulis 3-5 kalimat konten yang relevan dan detail untuk heading tersebut
 - Jangan tulis ulang judul/heading
 - Mulai langsung dengan konten paragraf
 - Gunakan bahasa Indonesia yang natural dan informatif
+- Berikan penjelasan yang comprehensive dan mendalam
 - Sesuaikan kedalaman konten dengan level judul
 
 TUGAS: Tulis konten detail untuk judul "${targetJudul.text}"`;
@@ -2133,9 +2365,10 @@ ${precedingContext}
 
 INSTRUKSI:
 - Ini adalah paragraf kosong pertama di bawah judul "${targetJudul.text}"
-- Tulis 2-3 kalimat konten yang relevan untuk judul tersebut
-- Mulai langsung dengan konten paragraf yang informatif
+- Tulis 3-5 kalimat konten yang relevan dan detail untuk judul tersebut
+- Mulai langsung dengan konten paragraf yang informatif dan comprehensive
 - Gunakan bahasa Indonesia yang natural dan professional
+- Berikan penjelasan yang mendalam dan valuable
 - Sesuaikan kedalaman konten dengan level judul
 
 TUGAS: Buat konten pembuka untuk "${targetJudul.text}"`;
@@ -2168,10 +2401,10 @@ ${targetJudul ? `JUDUL TERKAIT: ${targetJudul.text}` : ''}
 INSTRUKSI KHUSUS:
 - Lanjutkan langsung dari akhir teks saat ini: "${currentText}"
 - JANGAN mengulang atau menulis ulang teks yang sudah ada
-- Tulis maksimal 1-2 kalimat tambahan yang natural
+- Tulis 2-4 kalimat tambahan yang natural dan informatif
 - Pertahankan kohesi dan koherensi dengan teks yang sudah ada
 - Jaga konsistensi tone dan style penulisan
-- Berikan kelanjutan yang logis dan bermakna
+- Berikan kelanjutan yang logis, bermakna, dan comprehensive
 - Sesuaikan dengan format ${blockTypeDescription}
 ${targetJudul ? `- Pastikan relevan dengan judul "${targetJudul.text}"` : ''}
 
@@ -2223,20 +2456,29 @@ INSTRUKSI:
             break;
 
           case "write_anything":
-            setAIMode("continue");
-            openAIModal();
-            setAIStreamingState({
-              isStreaming: false,
-              streamedText: "",
-              currentBlock: null,
-              originalText: "",
-              showControls: false,
-              position: { x: 0, y: 0 },
-              progress: 0,
-              totalChunks: 0,
-              currentChunk: 0,
-            });
-            return;
+            // Get current context for write anything
+            const writeContext = analyzeCurrentCursorContext();
+            const contextForWrite = writeContext ? writeContext.precedingContext : extractContextFromCursor();
+            const currentForWrite = writeContext ? writeContext.currentText : extractTextFromBlock(currentBlock);
+            
+            // Use same logic as continue but with open-ended prompt
+            systemPrompt = `Lanjutkan penulisan dengan konten yang kreatif dan menarik.
+
+KONTEKS SEBELUMNYA:
+${contextForWrite}
+
+TEKS SAAT INI: ${currentForWrite}
+
+INSTRUKSI:
+- Lanjutkan langsung dari teks yang sudah ada (jika ada)
+- Tulis 2-5 kalimat yang natural, engaging, dan informatif
+- Gunakan bahasa Indonesia yang ekspresif dan comprehensive
+- Berikan informasi yang valuable, menarik, dan mendalam
+- Jaga konsistensi tone dengan teks sebelumnya
+- Berikan penjelasan yang detail dan substantif
+
+TUGAS: Lanjutkan tulisan dengan kreatif dan natural`;
+            break;
 
           default:
             setAIStreamingState({
@@ -4154,11 +4396,61 @@ INSTRUKSI:
                     </div>
                   </Tooltip>
                 )}
+
+                {/* Revision Indicators Panel */}
+                {revisionIndicators.length > 0 && (
+                  <Tooltip
+                    label={
+                      <Stack gap="xs">
+                        <Text size="xs" fw={600}>Indikator Revisi:</Text>
+                        {revisionIndicators.slice(0, 4).map((indicator) => (
+                          <Group key={indicator.blockId} gap="xs">
+                            <div style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              background: indicator.color
+                            }} />
+                            <Text size="xs">
+                              {indicator.type === 'needs-review' ? 'Perlu Review' : 
+                               indicator.type === 'ai-generated' ? 'Hasil AI' :
+                               indicator.type === 'modified' ? 'Dimodifikasi' : 'Disarankan'} 
+                              • {indicator.timestamp.toLocaleTimeString()}
+                            </Text>
+                          </Group>
+                        ))}
+                        {revisionIndicators.length > 4 && (
+                          <Text size="xs" c="dimmed">+{revisionIndicators.length - 4} lainnya</Text>
+                        )}
+                        <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
+                          Klik blok dengan indikator warna untuk info detail
+                        </Text>
+                      </Stack>
+                    }
+                    position="top"
+                    withArrow
+                  >
+                    <div style={{
+                      padding: '4px 6px',
+                      borderRadius: '4px',
+                      background: computedColorScheme === "dark" 
+                        ? 'rgba(255, 107, 107, 0.1)' 
+                        : 'rgba(255, 107, 107, 0.05)',
+                      border: `1px solid ${computedColorScheme === "dark" ? "rgba(255, 107, 107, 0.2)" : "rgba(255, 107, 107, 0.1)"}`,
+                      cursor: 'pointer',
+                      marginLeft: '8px'
+                    }}>
+                      <Text size="xs" fw={600} style={{ color: '#ff6b6b' }}>
+                        Revisi: {revisionIndicators.length}
+                      </Text>
+                    </div>
+                  </Tooltip>
+                )}
                 </div>
 
                 {/* Quick save indicator */}
                 {lastSavedContent.current && (
-                  <Tooltip label="Auto-saved" position="bottom">
+                  <Tooltip label="Tersimpan otomatis" position="bottom">
                     <ThemeIcon
                       size="sm"
                       variant="light"

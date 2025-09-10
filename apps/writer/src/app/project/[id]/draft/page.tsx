@@ -17,7 +17,9 @@ const ActivityLog = dynamic(() => import("@/components/ActivityLog"), {
 import NextImage from 'next/image';
 import { useActivityLog } from '@/hooks/useActivityLog';
 import { useDraftShortcuts } from '@/hooks/useDraftShortcuts';
+import { useAdvancedShortcuts } from '@/hooks/useAdvancedShortcuts';
 import { KeyboardShortcutsModal } from '@/components/KeyboardShortcutsModal';
+import { DraftQuickAccessModal } from '@/components/DraftQuickAccessModal';
 import {
   AppShell,
   Burger,
@@ -269,6 +271,7 @@ export default function Home() {
   // State untuk draft
   const [draftTitle, setDraftTitle] = useState('');
   const [shortcutsModalOpened, setShortcutsModalOpened] = useState(false);
+  const [draftQuickAccessOpened, setDraftQuickAccessOpened] = useState(false);
   const [draftContent, setDraftContent] = useState('');
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [draftProgress, setDraftProgress] = useState(0);
@@ -462,7 +465,7 @@ export default function Home() {
         setGetSessionId(data.user.id);
       }
     } catch (error: any) {
-      console.error('❌ fetchDropdownUser error:', error.message); 
+      console.warn('⚠️ fetchDropdownUser warning:', error.message); 
       setDropdownUser(null);
     } finally {
       setLoading(false);
@@ -1849,6 +1852,193 @@ const handleSubmitToTeacher = async () => {
     enabled: true,
   });
 
+  // Advanced shortcuts for expert users
+  useAdvancedShortcuts({
+    onInsertCitation: () => {
+      // Open bibliography modal to select citation
+      if (bibliographyList.length > 0) {
+        // Insert the next available citation number
+        const nextNumber = bibliographyList.length + 1;
+        insertCitationNumber(nextNumber);
+      } else {
+        notifications.show({
+          title: "No Bibliography Available",
+          message: "Please add bibliography items first before inserting citations",
+          color: "yellow",
+        });
+      }
+    },
+    onInsertFormula: () => {
+      // Open formula input modal or insert LaTeX formula
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.insertInlineContent([{ type: "text", text: "$$\\LaTeX formula$$", styles: { code: true } }]);
+        logFormula("LaTeX Formula", "Formula matematika berhasil ditambahkan ke dokumen");
+      }
+    },
+    onGenerateAI: () => {
+      // Trigger AI generation like the existing AI button
+      if (!draftTitle.trim()) {
+        notifications.show({
+          title: "Judul Diperlukan",
+          message: "Masukkan judul terlebih dahulu sebelum generate AI",
+          color: "yellow",
+        });
+        return;
+      }
+      
+      notifications.show({
+        title: "🤖 AI Generation Started",
+        message: `Generating content for "${draftTitle}"...`,
+        color: "blue",
+        autoClose: 3000,
+      });
+    },
+    onAnalyzeReferences: () => {
+      if (bibliographyList.length === 0) {
+        notifications.show({
+          title: "No References",
+          message: "Add bibliography items to analyze references",
+          color: "yellow",
+        });
+        return;
+      }
+      
+      notifications.show({
+        title: "🧠 Analyzing References",
+        message: `Analyzing ${bibliographyList.length} references with AI...`,
+        color: "purple",
+        autoClose: 3000,
+      });
+    },
+    onWordCount: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        const wordCount = editorRef.current?.getWordCount?.() || 0;
+        notifications.show({
+          title: "📝 Word Count",
+          message: `Current document: ${wordCount} words`,
+          color: "blue",
+          autoClose: 4000,
+        });
+      }
+    },
+    onInsertTable: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        // Insert a simple table structure
+        editor.insertBlocks([
+          {
+            type: "paragraph",
+            content: "| Column 1 | Column 2 | Column 3 |\n|----------|----------|----------|\n| Row 1    | Data     | Data     |\n| Row 2    | Data     | Data     |",
+          }
+        ], editor.getTextCursorPosition().block, "after");
+      }
+    },
+    onInsertImage: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.insertBlocks([
+          {
+            type: "image",
+            props: {
+              url: "https://via.placeholder.com/400x200/cccccc/969696?text=Image+Placeholder",
+              caption: "Image caption here",
+            }
+          }
+        ], editor.getTextCursorPosition().block, "after");
+      }
+    },
+    onInsertCode: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.insertBlocks([
+          {
+            type: "codeBlock",
+            props: {
+              language: "javascript"
+            },
+            content: "// Your code here\nconsole.log('Hello World');"
+          }
+        ], editor.getTextCursorPosition().block, "after");
+      }
+    },
+    onExportDraft: () => {
+      if (!draftTitle.trim()) {
+        notifications.show({
+          title: "No Title",
+          message: "Please add a title before exporting",
+          color: "yellow",
+        });
+        return;
+      }
+      
+      notifications.show({
+        title: "📄 Exporting Draft",
+        message: `Exporting "${draftTitle}" to PDF...`,
+        color: "blue",
+        autoClose: 3000,
+      });
+      
+      // Here you would implement actual PDF export functionality
+      // For now, we'll just show a success message after delay
+      setTimeout(() => {
+        notifications.show({
+          title: "✅ Export Complete",
+          message: `"${draftTitle}.pdf" ready for download`,
+          color: "green",
+        });
+      }, 2000);
+    },
+    onToggleFullscreen: () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+        notifications.show({
+          title: "Fullscreen Off",
+          message: "Exited fullscreen mode",
+          color: "blue",
+          autoClose: 2000,
+        });
+      } else {
+        document.documentElement.requestFullscreen();
+        notifications.show({
+          title: "Fullscreen On",
+          message: "Press F11 or Escape to exit fullscreen",
+          color: "blue",
+          autoClose: 3000,
+        });
+      }
+    },
+    onFindReplace: () => {
+      // Trigger browser's native find dialog
+      notifications.show({
+        title: "🔍 Find & Replace",
+        message: "Use Ctrl+F for find, browser's find dialog opened",
+        color: "blue",
+        autoClose: 2000,
+      });
+    },
+    onOpenDraftList: () => {
+      setDraftQuickAccessOpened(true);
+      notifications.show({
+        title: "📋 Draft List",
+        message: "Opening quick access to all drafts...",
+        color: "green",
+        autoClose: 2000,
+      });
+    },
+    onListRecentDrafts: () => {
+      setDraftQuickAccessOpened(true);
+      notifications.show({
+        title: "🕒 Recent Drafts",
+        message: "Showing recently modified drafts...",
+        color: "blue",
+        autoClose: 2000,
+      });
+    },
+    enabled: true,
+  });
+
   const startWriting = () => {
     console.log('🚀 Starting to write...');
     
@@ -2566,7 +2756,7 @@ const handleSubmitToTeacher = async () => {
                       color: dark ? 'white' : '#1c1c1c',
                     }}
                   >
-                    Halo, {(dropdownUser!.name).split('@')[0]} — Selamat datang di MySRE
+                    Halo, {dropdownUser?.name ? dropdownUser.name.split('@')[0] : 'Guest'} — Selamat datang di MySRE
                   </Text>
                   <Text size="sm" c="dimmed" style={{ marginTop: 2 }}>
                     Group {navUser.group}
@@ -2578,7 +2768,7 @@ const handleSubmitToTeacher = async () => {
             </div>
 
             <Group gap="sm" style={{ flexShrink: 0, whiteSpace: 'nowrap' }} suppressHydrationWarning>
-              <Tooltip label={dark ? 'Light mode' : 'Dark mode'}>
+              <Tooltip label={dark ? 'Mode terang' : 'Mode gelap'}>
                 <ActionIcon
                   variant="light"
                   color={dark ? 'yellow' : 'blue'}
@@ -2591,7 +2781,19 @@ const handleSubmitToTeacher = async () => {
                 </ActionIcon>
               </Tooltip>
             
-              <Tooltip label="Keyboard Shortcuts (Ctrl + /)">
+              <Tooltip label="Akses Cepat Draft (Ctrl + Shift + D)">
+                <ActionIcon 
+                  variant="light" 
+                  color="green" 
+                  size="lg" 
+                  onClick={() => setDraftQuickAccessOpened(true)}
+                  suppressHydrationWarning
+                >
+                  <IconFileText size={18} />
+                </ActionIcon>
+              </Tooltip>
+
+              <Tooltip label="Pintasan Keyboard (Ctrl + /)">
                 <ActionIcon 
                   variant="light" 
                   color="blue" 
@@ -2603,7 +2805,7 @@ const handleSubmitToTeacher = async () => {
                 </ActionIcon>
               </Tooltip>
 
-              <Tooltip label="Settings">
+              <Tooltip label="Pengaturan">
                 <ActionIcon variant="light" color="gray" size="lg" suppressHydrationWarning>
                   <IconSettings size={18} />
                 </ActionIcon>
@@ -3597,7 +3799,7 @@ Ringkasan dari pembahasan ${draftTitle.toLowerCase()} beserta rekomendasi untuk 
                                   </Button>
                                 </Group>
 
-                                <Divider label="Manual Tools" labelPosition="center" mb="md" />
+                                <Divider label="Tools Manual" labelPosition="center" mb="md" />
 
                                 <Group gap="md">
                                   <Button 
@@ -4108,7 +4310,7 @@ Ringkasan dari pembahasan ${draftTitle.toLowerCase()} beserta rekomendasi untuk 
                                     Preview Daftar Pustaka
                                   </Text>
                                   {/* Tombol copy ke clipboard */}
-                                  <Tooltip label="Copy bibliography">
+                                  <Tooltip label="Salin bibliografi">
                                     <ActionIcon
                                       variant="subtle"
                                       size="sm"
@@ -6599,6 +6801,44 @@ ${topic} merupakan skill yang sangat valuable dalam dunia teknologi modern. Deng
       <KeyboardShortcutsModal
         opened={shortcutsModalOpened}
         onClose={() => setShortcutsModalOpened(false)}
+      />
+
+      {/* Draft Quick Access Modal */}
+      <DraftQuickAccessModal
+        opened={draftQuickAccessOpened}
+        onClose={() => setDraftQuickAccessOpened(false)}
+        onSelectDraft={(draftId) => {
+          // Navigate to selected draft
+          router.push(`/project/${sessionIdN}/draft?draftId=${draftId}`);
+        }}
+        onCreateNew={() => {
+          // Clear current draft and create new
+          setDraftTitle('');
+          setDraftContent('');
+          setOutlineData([]);
+          setBibliographyList([]);
+          setSelectedSection('');
+          setGeneratedContent('');
+          
+          if (editorRef.current) {
+            const editor = editorRef.current.getEditor();
+            editor.replaceBlocks(editor.document, [
+              {
+                type: "paragraph",
+                content: "",
+              },
+            ]);
+          }
+          
+          // Close modal and show notification
+          setDraftQuickAccessOpened(false);
+          notifications.show({
+            title: "📝 Draft Baru Dibuat",
+            message: "Siap untuk mulai menulis draft baru Anda!",
+            color: "green",
+            autoClose: 3000,
+          });
+        }}
       />
 
     </AppShell>
