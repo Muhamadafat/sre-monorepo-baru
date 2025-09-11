@@ -413,6 +413,39 @@ const animationStyles = `
     50% { opacity: 0.5; }
   }
 
+  /* Enhanced persistent revision indicators */
+  .persistent-indicator {
+    position: relative !important;
+    padding-left: 16px !important;
+    border-left: 4px solid #ff6b6b !important;
+    box-shadow: inset 4px 0 0 rgba(255, 107, 107, 0.25) !important;
+    background-color: rgba(255, 107, 107, 0.05) !important;
+    border-radius: 8px !important;
+    transition: all 0.3s ease !important;
+  }
+
+  .persistent-bar {
+    position: absolute !important;
+    left: -12px !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: 6px !important;
+    height: 100% !important;
+    background: linear-gradient(180deg, #ff6b6b 0%, #ff5252 100%) !important;
+    border-radius: 3px !important;
+    box-shadow: 0 0 15px rgba(255, 107, 107, 0.5) !important;
+    z-index: 9999 !important;
+    animation: revision-pulse 2s ease-in-out infinite !important;
+    pointer-events: none !important;
+    opacity: 1 !important;
+  }
+
+  .persistent-indicator:hover {
+    background-color: rgba(255, 107, 107, 0.1) !important;
+    box-shadow: inset 4px 0 0 rgba(255, 107, 107, 0.4), 0 4px 12px rgba(255, 107, 107, 0.2) !important;
+    transform: translateX(2px) !important;
+  }
+
   .ai-progress-container {
     animation: progress-pulse 2s infinite;
   }
@@ -876,9 +909,24 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
               pointer-events: none !important;
             `;
             
-            // Also add background to parent for extra visibility
-            htmlElement.style.borderLeft = `4px solid ${colors[indicator.type]}`;
-            htmlElement.style.boxShadow = `inset 4px 0 0 ${colors[indicator.type]}40`;
+            // Enhanced styling for different indicator types, especially needs-review
+            if (indicator.type === 'needs-review') {
+              // Apply stronger styling for revision indicators
+              htmlElement.style.borderLeft = `4px solid ${colors[indicator.type]}`;
+              htmlElement.style.boxShadow = `inset 4px 0 0 ${colors[indicator.type]}40`;
+              htmlElement.style.backgroundColor = `${colors[indicator.type]}08`;
+              htmlElement.classList.add('persistent-indicator');
+              
+              // Ensure the indicator bar has maximum visibility
+              indicator_bar.style.opacity = '1';
+              indicator_bar.style.visibility = 'visible';
+              indicator_bar.style.display = 'block';
+              indicator_bar.classList.add('persistent-bar');
+            } else {
+              // Standard styling for other indicators
+              htmlElement.style.borderLeft = `4px solid ${colors[indicator.type]}`;
+              htmlElement.style.boxShadow = `inset 4px 0 0 ${colors[indicator.type]}40`;
+            }
             
             // Add tooltip with revision reason
             if (indicator.reason) {
@@ -896,14 +944,31 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       const timeoutId = setTimeout(applyRevisionIndicators, 100);
       const intervalId = setInterval(applyRevisionIndicators, 500);
       
-      // Cleanup after 5 seconds
+      // Enhanced persistence monitoring for revision indicators
+      const persistenceMonitor = setInterval(() => {
+        revisionIndicators.forEach(indicator => {
+          if (indicator.type === 'needs-review') {
+            const blockElement = document.querySelector(`[data-id="${indicator.blockId}"]`) || 
+                               document.querySelector(`[data-block-id="${indicator.blockId}"]`);
+            
+            if (blockElement && !blockElement.classList.contains('persistent-indicator')) {
+              console.log('🔄 Detected missing revision indicator, reapplying:', indicator.blockId);
+              applyRevisionIndicators();
+            }
+          }
+        });
+      }, 1000);
+      
+      // Cleanup after 10 seconds for persistence monitor
       const cleanupId = setTimeout(() => {
         clearInterval(intervalId);
-      }, 5000);
+        clearInterval(persistenceMonitor);
+      }, 10000);
       
       return () => {
         clearTimeout(timeoutId);
         clearInterval(intervalId);
+        clearInterval(persistenceMonitor);
         clearTimeout(cleanupId);
       };
     }, [revisionIndicators, editor.document]);
@@ -1867,6 +1932,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
         try {
           const allBlocks = editor.document;
           const currentIndex = allBlocks.findIndex(block => block.id === aiStreamingState.currentBlock!.id);
+          const blockId = aiStreamingState.currentBlock.id;
 
           if (currentIndex > 0 && allBlocks[currentIndex - 1].type === "heading" &&
             aiStreamingState.originalText === "") {
@@ -1880,12 +1946,80 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
             });
             editor.setTextCursorPosition(aiStreamingState.currentBlock, "end");
             
-            // Add revision indicator to mark this block as needing review
-            addRevisionIndicator(
-              aiStreamingState.currentBlock.id, 
-              'needs-review', 
-              'Konten AI dibatalkan - perlu direvisi'
-            );
+            // Enhanced revision indicator with persistent state
+            // First, remove any existing indicator for this block
+            setRevisionIndicators(prev => prev.filter(indicator => indicator.blockId !== blockId));
+            
+            // Add revision indicator to mark this block as needing review with enhanced persistence
+            setTimeout(() => {
+              addRevisionIndicator(
+                blockId, 
+                'needs-review', 
+                'Konten AI dibatalkan - perlu direvisi'
+              );
+              
+              // Force DOM update to ensure indicator persists
+              setTimeout(() => {
+                const blockElement = document.querySelector(`[data-id="${blockId}"]`) || 
+                                   document.querySelector(`[data-block-id="${blockId}"]`);
+                
+                if (blockElement) {
+                  console.log('🔄 Ensuring revision indicator persistence for block:', blockId);
+                  
+                  // Add persistent visual indicators with higher specificity
+                  const htmlElement = blockElement as HTMLElement;
+                  htmlElement.classList.add('revision-indicator', 'needs-review', 'persistent-indicator');
+                  
+                  // Apply immediate styling to ensure visibility
+                  htmlElement.style.position = 'relative';
+                  htmlElement.style.paddingLeft = '16px';
+                  htmlElement.style.borderLeft = '4px solid #ff6b6b';
+                  htmlElement.style.boxShadow = 'inset 4px 0 0 #ff6b6b40';
+                  htmlElement.style.backgroundColor = 'rgba(255, 107, 107, 0.05)';
+                  
+                  // Create persistent indicator bar
+                  let indicator_bar = blockElement.querySelector('.revision-bar') as HTMLElement;
+                  if (!indicator_bar) {
+                    indicator_bar = document.createElement('div');
+                    indicator_bar.className = 'revision-bar persistent-bar';
+                    blockElement.insertBefore(indicator_bar, blockElement.firstChild);
+                  }
+                  
+                  // Apply strong styling that won't be easily overridden
+                  indicator_bar.style.cssText = `
+                    position: absolute !important;
+                    left: -12px !important;
+                    top: 0 !important;
+                    bottom: 0 !important;
+                    width: 6px !important;
+                    height: 100% !important;
+                    background: linear-gradient(180deg, #ff6b6b 0%, #ff5252 100%) !important;
+                    border-radius: 3px !important;
+                    box-shadow: 0 0 15px #ff6b6b !important;
+                    z-index: 9999 !important;
+                    animation: revision-pulse 2s ease-in-out infinite !important;
+                    pointer-events: none !important;
+                    opacity: 1 !important;
+                  `;
+                  
+                  // Add tooltip with revision reason
+                  blockElement.setAttribute('title', 'Konten AI dibatalkan - perlu direvisi');
+                  
+                  console.log('✅ Enhanced persistent revision indicator applied');
+                }
+              }, 100);
+              
+              // Additional persistence check after 1 second
+              setTimeout(() => {
+                const blockElement = document.querySelector(`[data-id="${blockId}"]`) || 
+                                   document.querySelector(`[data-block-id="${blockId}"]`);
+                
+                if (blockElement && !blockElement.classList.contains('persistent-indicator')) {
+                  console.log('🔄 Re-applying revision indicator due to persistence check');
+                  addRevisionIndicator(blockId, 'needs-review', 'Konten AI dibatalkan - perlu direvisi');
+                }
+              }, 1000);
+            }, 50);
           }
 
         } catch (error) {
