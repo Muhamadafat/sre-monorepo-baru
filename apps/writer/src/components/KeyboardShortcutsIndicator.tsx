@@ -22,10 +22,10 @@ export function KeyboardShortcutsIndicator({ onShowShortcuts }: KeyboardShortcut
   const [hovering, setHovering] = useState(false);
 
   const quickShortcuts = [
-    { key: 'Ctrl + S', action: 'Save' },
-    { key: 'Ctrl + Alt + D', action: 'New Draft' },
-    { key: 'Ctrl + B', action: 'Bold' },
-    { key: 'Ctrl + I', action: 'Italic' },
+    { key: 'Ctrl + S', action: 'Simpan' },
+    { key: 'Ctrl + Alt + D', action: 'Draft Baru' },
+    { key: 'Ctrl + B', action: 'Tebal' },
+    { key: 'Ctrl + I', action: 'Miring' },
   ];
 
   return (
@@ -52,7 +52,7 @@ export function KeyboardShortcutsIndicator({ onShowShortcuts }: KeyboardShortcut
           >
             <Stack gap="xs">
               <Text size="xs" fw={500} c="dimmed">
-                Quick shortcuts:
+                Pintasan cepat:
               </Text>
               {quickShortcuts.map((shortcut, index) => (
                 <Group key={index} justify="space-between" gap="md">
@@ -67,7 +67,7 @@ export function KeyboardShortcutsIndicator({ onShowShortcuts }: KeyboardShortcut
                 </Group>
               ))}
               <Text size="xs" c="dimmed" ta="center">
-                Press <Badge size="xs" variant="outline">Ctrl + /</Badge> for all shortcuts
+                Tekan <Badge size="xs" variant="outline">Ctrl + /</Badge> untuk semua pintasan
               </Text>
             </Stack>
           </Paper>
@@ -75,7 +75,7 @@ export function KeyboardShortcutsIndicator({ onShowShortcuts }: KeyboardShortcut
       </Transition>
 
       <Tooltip
-        label="Keyboard Shortcuts (Ctrl + /)"
+        label="Pintasan Keyboard (Ctrl + /)"
         position="left"
         withArrow
       >

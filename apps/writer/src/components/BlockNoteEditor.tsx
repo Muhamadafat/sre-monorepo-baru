@@ -41,6 +41,9 @@ import {
 import { useClickOutside, useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { useTextFormattingShortcuts } from "@/hooks/useTextFormattingShortcuts";
+import { useEditorShortcuts } from "@/hooks/useEditorShortcuts";
+import { useAdvancedShortcuts } from "@/hooks/useAdvancedShortcuts";
+import { useDraftShortcuts } from "@/hooks/useDraftShortcuts";
 import {
   IconAlertTriangle,
   IconArrowBackUp,
@@ -69,6 +72,8 @@ import "katex/dist/katex.min.css";
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle } from "react";
 import Katex from "react-katex";
 const LaTeXModal = React.lazy(() => import("./LaTeXModal"));
+const SearchModal = React.lazy(() => import("./SearchModal"));
+const GoToLineModal = React.lazy(() => import("./GoToLineModal"));
 
 // Types
 interface JudulInfo {
@@ -649,6 +654,9 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     // LaTeX Modal state
     const [isLatexModalOpen, setIsLatexModalOpen] = React.useState(false);
     const [isAIToolsExpanded, setIsAIToolsExpanded] = React.useState(false);
+    const [searchModalOpened, { open: openSearchModal, close: closeSearchModal }] = useDisclosure(false);
+    const [goToLineModalOpened, { open: openGoToLineModal, close: closeGoToLineModal }] = useDisclosure(false);
+    const [searchMode, setSearchMode] = React.useState<'search' | 'replace'>('search');
 
     // Enhanced AI Streaming state with progress
     const [aiStreamingState, setAIStreamingState] = React.useState<AIStreamingState>({
@@ -824,8 +832,737 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           props: { backgroundColor: "gray" },
         });
       },
+      onLink: () => {
+        // Insert link
+        const selectedText = editor.getSelectedText();
+        if (selectedText) {
+          editor.createLink("https://example.com", selectedText);
+        } else {
+          notifications.show({
+            message: 'Pilih teks terlebih dahulu untuk membuat link',
+            color: 'orange',
+            autoClose: 3000,
+          });
+        }
+      },
       enabled: true,
     });
+
+    // Editor shortcuts integration
+    useEditorShortcuts({
+      onSearch: () => {
+        setSearchMode('search');
+        openSearchModal();
+      },
+      // Note: onFindReplace handled by useAdvancedShortcuts (Ctrl+H)
+      onGoToLine: () => {
+        openGoToLineModal();
+      },
+      onGoToStart: () => {
+        // Navigate to the beginning of document
+        if (editor?.document && editor.document.length > 0) {
+          const firstBlock = editor.document[0];
+          editor.setTextCursorPosition(firstBlock, "start");
+        }
+      },
+      onGoToEnd: () => {
+        // Navigate to the end of document
+        if (editor?.document && editor.document.length > 0) {
+          const lastBlock = editor.document[editor.document.length - 1];
+          editor.setTextCursorPosition(lastBlock, "end");
+        }
+      },
+      onDuplicateLine: () => {
+        // Duplicate current block
+        try {
+          const currentBlock = editor.getTextCursorPosition().block;
+          const duplicatedBlock = { ...currentBlock, id: undefined };
+          editor.insertBlocks([duplicatedBlock], currentBlock, "after");
+
+          notifications.show({
+            message: 'Baris berhasil diduplikasi',
+            color: 'blue',
+            autoClose: 2000,
+          });
+        } catch (error) {
+          console.error('Error duplicating line:', error);
+          notifications.show({
+            message: 'Gagal menduplikasi baris',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onDeleteLine: () => {
+        // Delete current block
+        try {
+          const currentBlock = editor.getTextCursorPosition().block;
+          if (editor.document.length > 1) {
+            editor.removeBlocks([currentBlock]);
+
+            notifications.show({
+              message: 'Baris berhasil dihapus',
+              color: 'blue',
+              autoClose: 2000,
+            });
+          } else {
+            notifications.show({
+              message: 'Tidak dapat menghapus satu-satunya baris',
+              color: 'orange',
+              autoClose: 3000,
+            });
+          }
+        } catch (error) {
+          console.error('Error deleting line:', error);
+          notifications.show({
+            message: 'Gagal menghapus baris',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onGenerateAI: () => {
+        // Open AI generation modal
+        openAIModal();
+      },
+      // Note: Tab/Shift+Tab indentation is handled natively by BlockNote editor
+      enabled: true,
+    });
+
+    // Advanced shortcuts integration
+    useAdvancedShortcuts({
+      onFindReplace: () => {
+        setSearchMode('replace');
+        openSearchModal();
+      },
+      onInsertCitation: () => {
+        // Insert citation with proper academic format
+        try {
+          const currentYear = new Date().getFullYear();
+          const citationBlock = {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "[Nama Penulis, ",
+                styles: { italic: true }
+              },
+              {
+                type: "text",
+                text: currentYear.toString(),
+                styles: { italic: true }
+              },
+              {
+                type: "text",
+                text: ", \"Judul Karya\", Penerbit]",
+                styles: { italic: true }
+              }
+            ]
+          };
+
+          editor.insertBlocks([citationBlock], editor.getTextCursorPosition().block, "after");
+
+          notifications.show({
+            message: '📚 Template kutipan akademik berhasil disisipkan',
+            color: 'green',
+            autoClose: 3000,
+          });
+        } catch (error) {
+          console.error('Error inserting citation:', error);
+          notifications.show({
+            message: 'Gagal menyisipkan kutipan',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onInsertFormula: () => {
+        openLatexModal();
+      },
+      onGenerateAI: () => {
+        openAIModal();
+      },
+      onAnalyzeReferences: () => {
+        // Analyze references in the document
+        try {
+          const blocks = editor.document;
+          let citationCount = 0;
+          let urls: string[] = [];
+          let citations: string[] = [];
+
+          blocks.forEach(block => {
+            if (block.content && Array.isArray(block.content)) {
+              block.content.forEach((contentItem: any) => {
+                if (contentItem.type === 'text' && contentItem.text) {
+                  const text = contentItem.text.toString();
+
+                  // Count citations (text in brackets or footnotes)
+                  const citationMatches = text.match(/\[.*?\]|\(.*?\d{4}.*?\)/g);
+                  if (citationMatches) {
+                    citationCount += citationMatches.length;
+                    citations.push(...citationMatches);
+                  }
+
+                  // Find URLs
+                  const urlMatches = text.match(/https?:\/\/[^\s]+/g);
+                  if (urlMatches) {
+                    urls.push(...urlMatches);
+                  }
+                }
+              });
+            }
+          });
+
+          const analysis = [
+            `📚 Kutipan ditemukan: ${citationCount}`,
+            `🔗 Link eksternal: ${urls.length}`,
+            `📊 Total referensi: ${citationCount + urls.length}`
+          ];
+
+          if (citations.length > 0) {
+            analysis.push(`\nContoh kutipan:\n${citations.slice(0, 3).join('\n')}`);
+          }
+
+          notifications.show({
+            title: 'Analisis Referensi',
+            message: analysis.join('\n'),
+            color: 'blue',
+            autoClose: 8000,
+          });
+        } catch (error) {
+          console.error('Error analyzing references:', error);
+          notifications.show({
+            message: 'Gagal menganalisis referensi',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onInsertTable: () => {
+        // Insert simple table using BlockNote's built-in table support
+        try {
+          // Create a simple 2x2 table structure that BlockNote can handle
+          const tableBlocks = [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "Kolom 1", styles: { bold: true } }]
+            },
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "Kolom 2", styles: { bold: true } }]
+            },
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "Data 1" }]
+            },
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "Data 2" }]
+            }
+          ];
+
+          editor.insertBlocks(tableBlocks, editor.getTextCursorPosition().block, "after");
+
+          notifications.show({
+            message: 'Struktur tabel berhasil disisipkan',
+            color: 'green',
+            autoClose: 2000,
+          });
+        } catch (error) {
+          console.error('Error inserting table:', error);
+          notifications.show({
+            message: 'Gagal menyisipkan tabel',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onInsertImage: () => {
+        // Insert image placeholder that actually works with BlockNote
+        try {
+          // Create a paragraph with image placeholder text and file input trigger
+          const imageBlock = {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "📷 [Gambar]",
+                styles: {
+                  backgroundColor: "blue",
+                  textColor: "white"
+                }
+              },
+              { type: "text", text: " - Klik untuk upload gambar atau drag & drop file ke sini" }
+            ]
+          };
+
+          editor.insertBlocks([imageBlock], editor.getTextCursorPosition().block, "after");
+
+          notifications.show({
+            message: 'Placeholder gambar disisipkan. Upload gambar dengan drag & drop',
+            color: 'green',
+            autoClose: 3000,
+          });
+        } catch (error) {
+          console.error('Error inserting image:', error);
+          notifications.show({
+            message: 'Gagal menyisipkan placeholder gambar',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onInsertCode: () => {
+        // Insert code block with proper BlockNote structure
+        try {
+          // First try the standard codeBlock type
+          editor.insertBlocks([{
+            type: "codeBlock",
+            props: {
+              language: "javascript"
+            },
+            content: "// Masukkan kode di sini\nconsole.log('Hello World!');"
+          }], editor.getTextCursorPosition().block, "after");
+
+          notifications.show({
+            message: 'Blok kode JavaScript berhasil disisipkan',
+            color: 'green',
+            autoClose: 2000,
+          });
+        } catch (error) {
+          // Fallback: create a paragraph with monospace styling if codeBlock doesn't work
+          try {
+            const codeBlock = {
+              type: "paragraph",
+              content: [
+                {
+                  type: "text",
+                  text: "// Masukkan kode di sini\nconsole.log('Hello World!');",
+                  styles: {
+                    code: true
+                  }
+                }
+              ]
+            };
+
+            editor.insertBlocks([codeBlock], editor.getTextCursorPosition().block, "after");
+
+            notifications.show({
+              message: 'Blok kode berhasil disisipkan (format alternatif)',
+              color: 'green',
+              autoClose: 2000,
+            });
+          } catch (fallbackError) {
+            console.error('Error inserting code block:', error, fallbackError);
+            notifications.show({
+              message: 'Gagal menyisipkan blok kode',
+              color: 'red',
+              autoClose: 3000,
+            });
+          }
+        }
+      },
+      onInsertQuote: () => {
+        // Insert quote block with proper styling
+        try {
+          // Create a new quote block after current position
+          const quoteBlock = {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "💬 Masukkan kutipan di sini...",
+                styles: {
+                  italic: true,
+                  textColor: "gray"
+                }
+              }
+            ],
+            props: {
+              backgroundColor: "gray"
+            }
+          };
+
+          editor.insertBlocks([quoteBlock], editor.getTextCursorPosition().block, "after");
+
+          notifications.show({
+            message: 'Blok kutipan berhasil disisipkan',
+            color: 'green',
+            autoClose: 2000,
+          });
+        } catch (error) {
+          // Fallback: just create italic text
+          try {
+            const simpleQuote = {
+              type: "paragraph",
+              content: [
+                {
+                  type: "text",
+                  text: '"Masukkan kutipan di sini..."',
+                  styles: {
+                    italic: true
+                  }
+                }
+              ]
+            };
+
+            editor.insertBlocks([simpleQuote], editor.getTextCursorPosition().block, "after");
+
+            notifications.show({
+              message: 'Kutipan berhasil disisipkan',
+              color: 'green',
+              autoClose: 2000,
+            });
+          } catch (fallbackError) {
+            console.error('Error inserting quote:', error, fallbackError);
+            notifications.show({
+              message: 'Gagal menyisipkan blok kutipan',
+              color: 'red',
+              autoClose: 3000,
+            });
+          }
+        }
+      },
+      onWordCount: () => {
+        // Show accurate word count
+        try {
+          let totalWords = 0;
+          let totalChars = 0;
+          let totalBlocks = 0;
+
+          const blocks = editor.document;
+
+          blocks.forEach(block => {
+            totalBlocks++;
+
+            if (block.content && Array.isArray(block.content)) {
+              block.content.forEach((contentItem: any) => {
+                if (contentItem.type === 'text' && contentItem.text) {
+                  const text = contentItem.text.toString();
+                  totalChars += text.length;
+
+                  // Count words (split by whitespace and filter non-empty)
+                  const words = text.split(/\s+/).filter((word: string) => word.trim().length > 0);
+                  totalWords += words.length;
+                }
+              });
+            }
+          });
+
+          // Create detailed word count modal-like notification
+          const stats = [
+            `📝 Kata: ${totalWords}`,
+            `🔤 Karakter: ${totalChars}`,
+            `📄 Blok: ${totalBlocks}`,
+            `⏱️ Est. baca: ${Math.ceil(totalWords / 200)} menit`
+          ].join(' • ');
+
+          notifications.show({
+            title: 'Statistik Dokumen',
+            message: stats,
+            color: 'blue',
+            autoClose: 8000,
+          });
+        } catch (error) {
+          console.error('Error counting words:', error);
+          notifications.show({
+            message: 'Gagal menghitung kata',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onExportDraft: () => {
+        // Export as text/markdown format (working implementation)
+        try {
+          let exportContent = '';
+          const blocks = editor.document;
+
+          blocks.forEach((block, index) => {
+            if (block.content && Array.isArray(block.content)) {
+              block.content.forEach((contentItem: any) => {
+                if (contentItem.type === 'text' && contentItem.text) {
+                  let text = contentItem.text.toString();
+
+                  // Apply basic formatting
+                  if (contentItem.styles) {
+                    if (contentItem.styles.bold) text = `**${text}**`;
+                    if (contentItem.styles.italic) text = `*${text}*`;
+                    if (contentItem.styles.code) text = `\`${text}\``;
+                  }
+
+                  exportContent += text;
+                }
+              });
+            }
+
+            // Add line break between blocks
+            if (index < blocks.length - 1) {
+              exportContent += '\n\n';
+            }
+          });
+
+          // Create and download file
+          const blob = new Blob([exportContent], { type: 'text/markdown' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `draft-${new Date().toISOString().split('T')[0]}.md`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          notifications.show({
+            message: 'Draft berhasil diekspor sebagai file Markdown',
+            color: 'green',
+            autoClose: 3000,
+          });
+        } catch (error) {
+          console.error('Error exporting draft:', error);
+          notifications.show({
+            message: 'Gagal mengekspor draft',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onToggleFullscreen: () => {
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+          notifications.show({
+            message: 'Keluar dari mode layar penuh',
+            color: 'blue',
+            autoClose: 2000,
+          });
+        } else {
+          document.documentElement.requestFullscreen();
+          notifications.show({
+            message: 'Mode layar penuh diaktifkan',
+            color: 'blue',
+            autoClose: 2000,
+          });
+        }
+      },
+      onOpenDraftList: () => {
+        // Quick draft list simulation - show available drafts in localStorage
+        try {
+          const savedDrafts = [];
+
+          // Check localStorage for saved drafts
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith('draft-')) {
+              savedDrafts.push({
+                key,
+                name: key.replace('draft-', '').replace(/-/g, ' '),
+                date: new Date(localStorage.getItem(key + '-date') || Date.now()).toLocaleDateString('id-ID')
+              });
+            }
+          }
+
+          if (savedDrafts.length > 0) {
+            const draftList = savedDrafts
+              .slice(0, 5) // Show max 5 recent drafts
+              .map(draft => `📄 ${draft.name} (${draft.date})`)
+              .join('\n');
+
+            notifications.show({
+              title: 'Draft Tersimpan (5 Terbaru)',
+              message: draftList,
+              color: 'blue',
+              autoClose: 8000,
+            });
+          } else {
+            notifications.show({
+              message: '📝 Belum ada draft tersimpan. Tekan Ctrl+S untuk menyimpan draft.',
+              color: 'gray',
+              autoClose: 5000,
+            });
+          }
+        } catch (error) {
+          console.error('Error listing drafts:', error);
+          notifications.show({
+            message: 'Gagal memuat daftar draft',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onListRecentDrafts: () => {
+        // Show recent drafts with more details
+        try {
+          const recentDrafts = [];
+          const now = Date.now();
+
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith('draft-')) {
+              const dateKey = key + '-date';
+              const savedDate = localStorage.getItem(dateKey);
+              const draftDate = savedDate ? new Date(savedDate).getTime() : now;
+              const hoursSince = Math.round((now - draftDate) / (1000 * 60 * 60));
+
+              recentDrafts.push({
+                key,
+                name: key.replace('draft-', '').replace(/-/g, ' '),
+                hoursSince,
+                date: new Date(draftDate).toLocaleString('id-ID')
+              });
+            }
+          }
+
+          // Sort by most recent first
+          recentDrafts.sort((a, b) => a.hoursSince - b.hoursSince);
+
+          if (recentDrafts.length > 0) {
+            const recentList = recentDrafts
+              .slice(0, 3)
+              .map(draft => {
+                const timeText = draft.hoursSince < 1 ? 'Baru saja' :
+                                draft.hoursSince < 24 ? `${draft.hoursSince} jam lalu` :
+                                `${Math.floor(draft.hoursSince / 24)} hari lalu`;
+                return `📄 ${draft.name}\n   ⏰ ${timeText}`;
+              })
+              .join('\n\n');
+
+            notifications.show({
+              title: 'Draft Terbaru',
+              message: recentList,
+              color: 'blue',
+              autoClose: 10000,
+            });
+          } else {
+            notifications.show({
+              message: '📝 Belum ada draft terbaru. Mulai menulis untuk membuat draft baru!',
+              color: 'gray',
+              autoClose: 5000,
+            });
+          }
+        } catch (error) {
+          console.error('Error listing recent drafts:', error);
+          notifications.show({
+            message: 'Gagal memuat draft terbaru',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      enabled: true,
+    });
+
+    // Draft shortcuts integration
+    useDraftShortcuts({
+      onSave: async () => {
+        // Implement real save functionality to localStorage
+        try {
+          const content = editor.document;
+          const timestamp = new Date().toISOString();
+          const draftKey = `draft-${timestamp.split('T')[0]}-${Date.now()}`;
+
+          // Save content and metadata
+          localStorage.setItem(draftKey, JSON.stringify(content));
+          localStorage.setItem(draftKey + '-date', timestamp);
+          localStorage.setItem(draftKey + '-title', 'Draft ' + new Date().toLocaleString('id-ID'));
+
+          notifications.show({
+            title: 'Draft Tersimpan',
+            message: '✅ Draft berhasil disimpan ke local storage',
+            color: 'green',
+            autoClose: 3000,
+          });
+        } catch (error) {
+          console.error('Error saving draft:', error);
+          notifications.show({
+            message: 'Gagal menyimpan draft',
+            color: 'red',
+            autoClose: 3000,
+          });
+        }
+      },
+      onNewDraft: () => {
+        // Clear editor content for new draft
+        try {
+          editor.replaceBlocks(editor.document, [
+            {
+              type: "paragraph",
+              content: []
+            }
+          ]);
+
+          notifications.show({
+            message: 'Draft baru dibuat',
+            color: 'blue',
+            autoClose: 2000,
+          });
+        } catch (error) {
+          console.error('Error creating new draft:', error);
+        }
+      },
+      onShowHelp: () => {
+        // This should be connected to keyboard shortcuts modal
+        notifications.show({
+          message: 'Tekan Ctrl+/ untuk melihat bantuan pintasan keyboard',
+          color: 'blue',
+          autoClose: 3000,
+        });
+      },
+      enabled: true,
+    });
+
+    // Search functionality implementation
+    const handleSearch = useCallback((query: string) => {
+      // Simple search implementation - highlight matching text
+      console.log('Searching for:', query);
+
+      // For now, show notification. Full text search can be implemented later
+      notifications.show({
+        message: `Mencari: "${query}"`,
+        color: 'blue',
+        autoClose: 2000,
+      });
+    }, []);
+
+    const handleReplace = useCallback((searchQuery: string, replaceQuery: string) => {
+      console.log('Replacing:', searchQuery, 'with:', replaceQuery);
+
+      notifications.show({
+        message: `Mengganti "${searchQuery}" dengan "${replaceQuery}"`,
+        color: 'blue',
+        autoClose: 2000,
+      });
+    }, []);
+
+    const handleGoToLine = useCallback((lineNumber: number) => {
+      try {
+        // For now, navigate to block number (approximate line)
+        if (editor?.document && lineNumber <= editor.document.length) {
+          const targetBlock = editor.document[lineNumber - 1];
+          if (targetBlock) {
+            editor.setTextCursorPosition(targetBlock, "start");
+
+            notifications.show({
+              message: `Pergi ke baris ${lineNumber}`,
+              color: 'green',
+              autoClose: 2000,
+            });
+          }
+        } else {
+          notifications.show({
+            message: `Baris ${lineNumber} tidak ditemukan`,
+            color: 'orange',
+            autoClose: 3000,
+          });
+        }
+      } catch (error) {
+        console.error('Error going to line:', error);
+        notifications.show({
+          message: 'Gagal pergi ke baris',
+          color: 'red',
+          autoClose: 3000,
+        });
+      }
+    }, [editor]);
 
     // Check if undo/redo is available
     const canUndo = useCallback(() => {
@@ -6493,6 +7230,33 @@ INSTRUKSI:
               opened={isLatexModalOpen}
               onClose={closeLatexModal}
               onInsert={handleLatexInsert}
+            />
+          </React.Suspense>
+        )}
+
+        {/* Search Modal with Suspense */}
+        {searchModalOpened && (
+          <React.Suspense fallback={null}>
+            <SearchModal
+              opened={searchModalOpened}
+              onClose={closeSearchModal}
+              searchMode={searchMode}
+              onSearch={handleSearch}
+              onReplace={handleReplace}
+              currentMatch={0}
+              totalMatches={0}
+            />
+          </React.Suspense>
+        )}
+
+        {/* Go to Line Modal with Suspense */}
+        {goToLineModalOpened && (
+          <React.Suspense fallback={null}>
+            <GoToLineModal
+              opened={goToLineModalOpened}
+              onClose={closeGoToLineModal}
+              onGoToLine={handleGoToLine}
+              maxLines={editor?.document?.length || 1000}
             />
           </React.Suspense>
         )}

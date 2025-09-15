@@ -19,18 +19,23 @@ export const useKeyboardShortcuts = ({ shortcuts, enabled = true }: UseKeyboardS
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (!enabled) return;
 
-    // Don't trigger shortcuts when user is typing in input fields
+    // Don't trigger shortcuts when user is typing in input fields, but allow more shortcuts in contentEditable (editor)
     const target = event.target as HTMLElement;
-    if (
-      target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
-      target.contentEditable === 'true' ||
-      target.closest('[contenteditable="true"]')
-    ) {
-      // Only allow certain shortcuts in text fields (like Ctrl+S for save)
+    const isInEditor = target.contentEditable === 'true' || target.closest('[contenteditable="true"]');
+    const isInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+
+    if (isInInput) {
+      // Only allow essential shortcuts in input fields
       const allowedInInputs = ['s', 'n'];
       const currentKey = event.key.toLowerCase();
       if (!allowedInInputs.includes(currentKey) || !event.ctrlKey) {
+        return;
+      }
+    } else if (isInEditor) {
+      // Allow more shortcuts in contentEditable editor, but exclude some that conflict with typing
+      const blockedInEditor = []; // We'll allow all shortcuts in editor for now
+      const currentKey = event.key.toLowerCase();
+      if (blockedInEditor.includes(currentKey)) {
         return;
       }
     }
@@ -43,6 +48,13 @@ export const useKeyboardShortcuts = ({ shortcuts, enabled = true }: UseKeyboardS
       const matchesMeta = shortcut.meta ? event.metaKey : true;
 
       if (matchesKey && matchesCtrl && matchesAlt && matchesShift && matchesMeta) {
+        console.log('🎯 Keyboard shortcut triggered:', shortcut.description, {
+          key: event.key,
+          ctrl: event.ctrlKey,
+          alt: event.altKey,
+          shift: event.shiftKey,
+          shortcut: shortcut
+        });
         event.preventDefault();
         event.stopPropagation();
         shortcut.action();

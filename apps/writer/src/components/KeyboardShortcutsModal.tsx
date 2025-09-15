@@ -30,75 +30,75 @@ interface ShortcutGroup {
 
 const shortcutGroups: ShortcutGroup[] = [
   {
-    title: 'General',
+    title: 'Umum',
     shortcuts: [
-      { keys: 'Ctrl + S', description: 'Save current draft' },
-      { keys: 'Ctrl + Alt + D', description: 'Create new draft/project' },
-      { keys: 'Ctrl + /', description: 'Show this help dialog' },
-      { keys: 'Ctrl + F', description: 'Search in document' },
-      { keys: 'Ctrl + Z', description: 'Undo last action' },
-      { keys: 'Ctrl + Y', description: 'Redo last action' },
+      { keys: 'Ctrl + S', description: 'Simpan draft saat ini' },
+      { keys: 'Ctrl + Alt + D', description: 'Buat draft/proyek baru' },
+      { keys: 'Ctrl + /', description: 'Tampilkan dialog bantuan ini' },
+      { keys: 'Ctrl + F', description: 'Cari dalam dokumen' },
+      { keys: 'Ctrl + Z', description: 'Batalkan aksi terakhir' },
+      { keys: 'Ctrl + Y', description: 'Ulangi aksi terakhir' },
     ],
   },
   {
-    title: 'Text Formatting',
+    title: 'Format Teks',
     shortcuts: [
-      { keys: 'Ctrl + B', description: 'Bold text' },
-      { keys: 'Ctrl + I', description: 'Italic text' },
-      { keys: 'Ctrl + U', description: 'Underline text' },
-      { keys: 'Ctrl + K', description: 'Insert link' },
-      { keys: 'Ctrl + Shift + L', description: 'Create bulleted list' },
-      { keys: 'Ctrl + Shift + O', description: 'Create numbered list' },
+      { keys: 'Ctrl + B', description: 'Teks tebal' },
+      { keys: 'Ctrl + I', description: 'Teks miring' },
+      { keys: 'Ctrl + U', description: 'Garis bawah teks' },
+      { keys: 'Ctrl + K', description: 'Sisipkan tautan' },
+      { keys: 'Ctrl + Shift + L', description: 'Buat daftar berbutir' },
+      { keys: 'Ctrl + Shift + O', description: 'Buat daftar bernomor' },
     ],
   },
   {
-    title: 'Navigation',
+    title: 'Navigasi',
     shortcuts: [
-      { keys: 'Ctrl + Home', description: 'Go to beginning of document' },
-      { keys: 'Ctrl + End', description: 'Go to end of document' },
-      { keys: 'Ctrl + G', description: 'Go to line' },
-      { keys: 'Escape', description: 'Close modals/menus' },
+      { keys: 'Ctrl + Home', description: 'Pergi ke awal dokumen' },
+      { keys: 'Ctrl + End', description: 'Pergi ke akhir dokumen' },
+      { keys: 'Ctrl + G', description: 'Pergi ke baris' },
+      { keys: 'Escape', description: 'Tutup modal/menu' },
     ],
   },
   {
-    title: 'Editor Actions',
+    title: 'Aksi Editor',
     shortcuts: [
-      { keys: 'Ctrl + Enter', description: 'Generate AI content' },
-      { keys: 'Ctrl + D', description: 'Duplicate line/block' },
-      { keys: 'Ctrl + Shift + K', description: 'Delete line' },
-      { keys: 'Tab', description: 'Indent text' },
-      { keys: 'Shift + Tab', description: 'Outdent text' },
+      { keys: 'Ctrl + Enter', description: 'Buat konten AI' },
+      { keys: 'Ctrl + D', description: 'Duplikasi baris/blok' },
+      { keys: 'Ctrl + Shift + K', description: 'Hapus baris' },
+      { keys: 'Tab', description: 'Indentasi teks' },
+      { keys: 'Shift + Tab', description: 'Kurangi indentasi teks' },
     ],
   },
   {
-    title: 'Advanced Features (Expert)',
+    title: 'Fitur Lanjutan (Ahli)',
     shortcuts: [
-      { keys: 'Ctrl + Alt + R', description: 'Insert citation' },
-      { keys: 'Ctrl + Shift + M', description: 'Insert mathematical formula' },
-      { keys: 'Ctrl + Shift + G', description: 'Generate AI content' },
-      { keys: 'Ctrl + Alt + B', description: 'Analyze references with AI' },
-      { keys: 'Ctrl + Alt + W', description: 'Show word count' },
+      { keys: 'Ctrl + Alt + R', description: 'Sisipkan kutipan' },
+      { keys: 'Ctrl + Shift + M', description: 'Sisipkan rumus matematika' },
+      { keys: 'Ctrl + Shift + G', description: 'Buat konten AI' },
+      { keys: 'Ctrl + Alt + B', description: 'Analisis referensi dengan AI' },
+      { keys: 'Ctrl + Alt + W', description: 'Tampilkan jumlah kata' },
     ],
   },
   {
-    title: 'Content Insertion (Expert)',
+    title: 'Penyisipan Konten (Ahli)',
     shortcuts: [
-      { keys: 'Ctrl + Shift + T', description: 'Insert table' },
-      { keys: 'Ctrl + Shift + I', description: 'Insert image placeholder' },
-      { keys: 'Ctrl + Shift + C', description: 'Insert code block' },
-      { keys: 'Ctrl + Alt + Q', description: 'Insert quote block' },
-      { keys: 'Ctrl + Shift + P', description: 'Export draft to PDF' },
-      { keys: 'F11', description: 'Toggle fullscreen mode' },
-      { keys: 'Ctrl + H', description: 'Find and replace' },
+      { keys: 'Ctrl + Shift + T', description: 'Sisipkan tabel' },
+      { keys: 'Ctrl + Shift + I', description: 'Sisipkan placeholder gambar' },
+      { keys: 'Ctrl + Shift + C', description: 'Sisipkan blok kode' },
+      { keys: 'Ctrl + Alt + Q', description: 'Sisipkan blok kutipan' },
+      { keys: 'Ctrl + Shift + P', description: 'Ekspor draft ke PDF' },
+      { keys: 'F11', description: 'Toggle mode layar penuh' },
+      { keys: 'Ctrl + H', description: 'Cari dan ganti' },
     ],
   },
   {
-    title: 'Draft Workflow (Quick Access)',
+    title: 'Alur Kerja Draft (Akses Cepat)',
     shortcuts: [
-      { keys: 'Ctrl + Shift + D', description: 'Open draft list (quick access)' },
-      { keys: 'Ctrl + Alt + L', description: 'List recent drafts' },
-      { keys: 'Ctrl + Alt + D', description: 'Create new draft' },
-      { keys: 'Ctrl + S', description: 'Save current draft' },
+      { keys: 'Ctrl + Shift + D', description: 'Buka daftar draft (akses cepat)' },
+      { keys: 'Ctrl + Alt + L', description: 'Daftar draft terbaru' },
+      { keys: 'Ctrl + Alt + D', description: 'Buat draft baru' },
+      { keys: 'Ctrl + S', description: 'Simpan draft saat ini' },
     ],
   },
 ];
@@ -119,7 +119,7 @@ export function KeyboardShortcutsModal({ opened, onClose }: KeyboardShortcutsMod
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
-          }}>Keyboard Shortcuts</Title>
+          }}>Pintasan Keyboard</Title>
         </Group>
       }
       size="xl"
@@ -150,7 +150,7 @@ export function KeyboardShortcutsModal({ opened, onClose }: KeyboardShortcutsMod
         lineHeight: 1.6,
         letterSpacing: '0.025em',
       }}>
-        Use these keyboard shortcuts to work more efficiently in the writer.
+        Gunakan pintasan keyboard ini untuk bekerja lebih efisien di editor.
       </Text>
 
       <Stack gap="md">
@@ -242,13 +242,13 @@ export function KeyboardShortcutsModal({ opened, onClose }: KeyboardShortcutsMod
         lineHeight: 1.6,
         letterSpacing: '0.025em',
       }}>
-        💡 Tip: Most shortcuts work even when typing in text fields. Press <Badge size="xs" variant="outline" style={{
+        💡 Tips: Sebagian besar pintasan berfungsi bahkan saat mengetik di bidang teks. Tekan <Badge size="xs" variant="outline" style={{
           background: 'rgba(255, 255, 255, 0.8)',
           border: '1px solid rgba(102, 126, 234, 0.3)',
           color: '#667eea',
           fontFamily: 'JetBrains Mono, Consolas, monospace',
           borderRadius: '4px',
-        }}>Ctrl + /</Badge> anytime to see this help.
+        }}>Ctrl + /</Badge> kapan saja untuk melihat bantuan ini.
       </Text>
     </Modal>
   );
