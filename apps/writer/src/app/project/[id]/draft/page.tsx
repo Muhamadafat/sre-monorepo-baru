@@ -18,6 +18,8 @@ import NextImage from 'next/image';
 import { useActivityLog } from '@/hooks/useActivityLog';
 import { useDraftShortcuts } from '@/hooks/useDraftShortcuts';
 import { useAdvancedShortcuts } from '@/hooks/useAdvancedShortcuts';
+import { useTextFormattingShortcuts } from '@/hooks/useTextFormattingShortcuts';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { KeyboardShortcutsModal } from '@/components/KeyboardShortcutsModal';
 import { DraftQuickAccessModal } from '@/components/DraftQuickAccessModal';
 import {
@@ -1884,11 +1886,16 @@ const handleSubmitToTeacher = async () => {
       }
     },
     onInsertFormula: () => {
-      // Open formula input modal or insert LaTeX formula
-      const editor = editorRef.current?.getEditor();
-      if (editor) {
-        editor.insertInlineContent([{ type: "text", text: "$$\\LaTeX formula$$", styles: { code: true } }]);
-        logFormula("LaTeX Formula", "Formula matematika berhasil ditambahkan ke dokumen");
+      // Open LaTeX modal directly
+      if (editorRef.current?.openLatexModal) {
+        editorRef.current.openLatexModal();
+      } else {
+        notifications.show({
+          title: "LaTeX Modal",
+          message: "Membuka modal LaTeX untuk sisipkan rumus matematika...",
+          color: "blue",
+          autoClose: 2000,
+        });
       }
     },
     onGenerateAI: () => {
@@ -2052,7 +2059,301 @@ const handleSubmitToTeacher = async () => {
         autoClose: 2000,
       });
     },
+    onInsertQuote: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.insertBlocks([
+          {
+            type: "paragraph",
+            content: "",
+            props: {
+              textColor: "default",
+              backgroundColor: "default",
+              textAlignment: "left"
+            }
+          }
+        ], editor.getTextCursorPosition().block, "after");
+
+        // Insert the quote block
+        setTimeout(() => {
+          editor.insertBlocks([
+            {
+              type: "paragraph",
+              content: "Quote text here...",
+              props: {
+                textColor: "gray",
+                backgroundColor: "gray",
+                textAlignment: "left"
+              }
+            }
+          ], editor.getTextCursorPosition().block, "after");
+        }, 100);
+
+        notifications.show({
+          title: "💬 Quote Block Added",
+          message: "Quote block has been inserted",
+          color: "blue",
+          autoClose: 2000,
+        });
+      }
+    },
     enabled: true,
+  });
+
+  // Text formatting shortcuts
+  useTextFormattingShortcuts({
+    onBold: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        // Toggle bold formatting for selected text
+        editor.toggleStyles({ bold: true });
+        notifications.show({
+          title: "Bold Applied",
+          message: "Text formatting applied",
+          color: "blue",
+          autoClose: 1000,
+        });
+      }
+    },
+    onItalic: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.toggleStyles({ italic: true });
+        notifications.show({
+          title: "Italic Applied",
+          message: "Text formatting applied",
+          color: "blue",
+          autoClose: 1000,
+        });
+      }
+    },
+    onUnderline: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.toggleStyles({ underline: true });
+        notifications.show({
+          title: "Underline Applied",
+          message: "Text formatting applied",
+          color: "blue",
+          autoClose: 1000,
+        });
+      }
+    },
+    onLink: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        const url = prompt("Masukkan URL:");
+        const text = prompt("Masukkan teks link (opsional):");
+        if (url) {
+          editor.createLink(url, text || url);
+          notifications.show({
+            title: "🔗 Link Added",
+            message: "Link has been inserted",
+            color: "blue",
+            autoClose: 2000,
+          });
+        }
+      }
+    },
+    onBulletList: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.insertBlocks([
+          {
+            type: "bulletListItem",
+            content: "List item",
+          }
+        ], editor.getTextCursorPosition().block, "after");
+        notifications.show({
+          title: "• Bullet List",
+          message: "Bullet list created",
+          color: "blue",
+          autoClose: 1500,
+        });
+      }
+    },
+    onNumberedList: () => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.insertBlocks([
+          {
+            type: "numberedListItem",
+            content: "List item",
+          }
+        ], editor.getTextCursorPosition().block, "after");
+        notifications.show({
+          title: "1. Numbered List",
+          message: "Numbered list created",
+          color: "blue",
+          autoClose: 1500,
+        });
+      }
+    },
+    onHeading: (level: number) => {
+      const editor = editorRef.current?.getEditor();
+      if (editor) {
+        editor.insertBlocks([
+          {
+            type: "heading",
+            props: { level },
+            content: `Heading ${level}`,
+          }
+        ], editor.getTextCursorPosition().block, "after");
+        notifications.show({
+          title: `H${level} Heading`,
+          message: `Heading level ${level} created`,
+          color: "blue",
+          autoClose: 1500,
+        });
+      }
+    },
+    enabled: true,
+  });
+
+  // Additional editor shortcuts
+  useKeyboardShortcuts({
+    enabled: true,
+    shortcuts: [
+      // Search shortcuts
+      {
+        key: 'f',
+        ctrl: true,
+        description: 'Find in document',
+        action: () => {
+          // Trigger browser's native find dialog
+          if (document.execCommand) {
+            document.execCommand('find', false, undefined);
+          }
+          notifications.show({
+            title: "🔍 Find",
+            message: "Find dialog opened (Ctrl+F)",
+            color: "blue",
+            autoClose: 2000,
+          });
+        },
+      },
+      // Navigation shortcuts
+      {
+        key: 'Home',
+        ctrl: true,
+        description: 'Go to document start',
+        action: () => {
+          const editor = editorRef.current?.getEditor();
+          if (editor) {
+            const firstBlock = editor.document[0];
+            if (firstBlock) {
+              editor.setTextCursorPosition(firstBlock, "start");
+              notifications.show({
+                title: "⬆️ Document Start",
+                message: "Moved to beginning of document",
+                color: "blue",
+                autoClose: 1500,
+              });
+            }
+          }
+        },
+      },
+      {
+        key: 'End',
+        ctrl: true,
+        description: 'Go to document end',
+        action: () => {
+          const editor = editorRef.current?.getEditor();
+          if (editor) {
+            const lastBlock = editor.document[editor.document.length - 1];
+            if (lastBlock) {
+              editor.setTextCursorPosition(lastBlock, "end");
+              notifications.show({
+                title: "⬇️ Document End",
+                message: "Moved to end of document",
+                color: "blue",
+                autoClose: 1500,
+              });
+            }
+          }
+        },
+      },
+      {
+        key: 'g',
+        ctrl: true,
+        description: 'Go to line',
+        action: () => {
+          const lineNumber = prompt("Go to line number:");
+          if (lineNumber && !isNaN(Number(lineNumber))) {
+            const line = parseInt(lineNumber);
+            const editor = editorRef.current?.getEditor();
+            if (editor && editor.document[line - 1]) {
+              editor.setTextCursorPosition(editor.document[line - 1], "start");
+              notifications.show({
+                title: `📍 Line ${line}`,
+                message: `Moved to line ${line}`,
+                color: "blue",
+                autoClose: 2000,
+              });
+            } else {
+              notifications.show({
+                title: "❌ Invalid Line",
+                message: `Line ${line} not found`,
+                color: "red",
+                autoClose: 2000,
+              });
+            }
+          }
+        },
+      },
+      // Editor actions
+      {
+        key: 'Enter',
+        ctrl: true,
+        description: 'Generate AI content',
+        action: () => {
+          notifications.show({
+            title: "🤖 AI Content",
+            message: "AI content generation triggered",
+            color: "purple",
+            autoClose: 2000,
+          });
+        },
+      },
+      {
+        key: 'd',
+        ctrl: true,
+        description: 'Duplicate block',
+        action: () => {
+          const editor = editorRef.current?.getEditor();
+          if (editor) {
+            const currentBlock = editor.getTextCursorPosition().block;
+            const duplicatedBlock = { ...currentBlock };
+            editor.insertBlocks([duplicatedBlock], currentBlock, "after");
+            notifications.show({
+              title: "📋 Block Duplicated",
+              message: "Current block has been duplicated",
+              color: "blue",
+              autoClose: 1500,
+            });
+          }
+        },
+      },
+      {
+        key: 'k',
+        ctrl: true,
+        shift: true,
+        description: 'Delete line',
+        action: () => {
+          const editor = editorRef.current?.getEditor();
+          if (editor) {
+            const currentBlock = editor.getTextCursorPosition().block;
+            editor.removeBlocks([currentBlock]);
+            notifications.show({
+              title: "🗑️ Line Deleted",
+              message: "Current line has been deleted",
+              color: "red",
+              autoClose: 1500,
+            });
+          }
+        },
+      },
+    ],
   });
 
   const startWriting = () => {

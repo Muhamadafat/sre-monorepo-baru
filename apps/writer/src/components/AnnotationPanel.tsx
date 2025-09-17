@@ -127,8 +127,14 @@ export default function AnnotationPanel({ sessionId }: { sessionId?: string }) {
         const data = await res.json();
         console.log('📥 Annotations received:', data.length);
         setAnnotations(data);
+      } else if (res.status === 404) {
+        // Jika 404, kemungkinan project belum terhubung dengan brainstorming session
+        console.log('ℹ️ No annotations found for this project - this is normal for new projects');
+        setAnnotations([]); // Set empty array instead of showing error
       } else {
         console.error('❌ Annotation API error:', res.status);
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Error details:', errorData);
       }
     } catch (error) {
       console.error('❌ Error fetching annotations:', error);

@@ -117,6 +117,7 @@ interface BlockNoteEditorRef {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
+  openLatexModal: () => void;
 }
 
 //article interface
@@ -2051,6 +2052,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       redo,
       canUndo,
       canRedo,
+      openLatexModal,
     }));
 
     // LaTeX Modal handlers
