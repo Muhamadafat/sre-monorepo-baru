@@ -3453,14 +3453,82 @@ TUGAS: Lanjutkan tulisan dengan kreatif dan natural`;
             return;
         }
 
-        const { text } = await generateText({
-          model: aiModel,
-          prompt: systemPrompt,
-          maxTokens,
-          temperature: 0.7,
-          presencePenalty: 0.2,
-          frequencyPenalty: 0.1,
-        });
+        let text = '';
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        while (retryCount <= maxRetries) {
+          try {
+            const result = await generateText({
+              model: aiModel,
+              prompt: systemPrompt,
+              maxTokens,
+              temperature: 0.7,
+              presencePenalty: 0.2,
+              frequencyPenalty: 0.1,
+            });
+            text = result.text;
+            break; // Success, exit retry loop
+          } catch (aiError: any) {
+            retryCount++;
+            console.error(`AI generation attempt ${retryCount} failed:`, aiError);
+
+            if (retryCount > maxRetries) {
+              // All retries exhausted, handle the error
+              if (aiError.message?.includes('overloaded') || aiError.message?.includes('rate limit')) {
+                notifications.show({
+                  title: '🤖 AI Server Sibuk',
+                  message: 'Server AI sedang overload setelah beberapa percobaan. Silakan tunggu 1-2 menit dan coba lagi.',
+                  color: 'orange',
+                  icon: <IconAlertTriangle size={18} />,
+                  autoClose: 7000,
+                });
+              } else if (aiError.message?.includes('quota') || aiError.message?.includes('credit')) {
+                notifications.show({
+                  title: '💳 Quota AI Habis',
+                  message: 'Quota AI sudah habis. Silakan hubungi admin atau coba lagi nanti.',
+                  color: 'red',
+                  icon: <IconX size={18} />,
+                  autoClose: 7000,
+                });
+              } else {
+                notifications.show({
+                  title: '⚠️ AI Error',
+                  message: `AI mengalami kendala setelah ${maxRetries} percobaan: ${aiError.message || 'Unknown error'}`,
+                  color: 'red',
+                  icon: <IconX size={18} />,
+                  autoClose: 5000,
+                });
+              }
+
+              setAIStreamingState({
+                isStreaming: false,
+                streamedText: "",
+                currentBlock: null,
+                originalText: "",
+                showControls: false,
+                position: { x: 0, y: 0 },
+                progress: 0,
+                totalChunks: 0,
+                currentChunk: 0,
+              });
+              return;
+            } else {
+              // Wait before retry with exponential backoff
+              const waitTime = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
+              console.log(`Retrying in ${waitTime}ms...`);
+
+              notifications.show({
+                title: `🔄 Percobaan ${retryCount}/${maxRetries}`,
+                message: `AI sibuk, mencoba lagi dalam ${waitTime/1000} detik...`,
+                color: 'blue',
+                autoClose: waitTime - 500,
+              });
+
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+          }
+        }
 
         if (text && text.trim()) {
           // Start typing animation - now handles all block types properly
@@ -3485,14 +3553,18 @@ TUGAS: Lanjutkan tulisan dengan kreatif dan natural`;
           });
         }
 
-      } catch (error) {
+      } catch (error: any) {
         console.error("Inline AI action failed:", error);
-        notifications.show({
-          title: 'Gagal Menggunakan AI',
-          message: 'Terjadi kesalahan saat mencoba menggunakan fitur AI. Silakan coba lagi.',
-          color: 'red',
-          icon: <IconX size={18} />,
-        });
+
+        // Only show generic error if we haven't already handled AI-specific errors
+        if (!error.message?.includes('overloaded') && !error.message?.includes('quota')) {
+          notifications.show({
+            title: 'Gagal Menggunakan AI',
+            message: 'Terjadi kesalahan saat mencoba menggunakan fitur AI. Silakan coba lagi.',
+            color: 'red',
+            icon: <IconX size={18} />,
+          });
+        }
         setAIStreamingState({
           isStreaming: false,
           streamedText: "",
