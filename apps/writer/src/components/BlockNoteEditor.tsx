@@ -1927,6 +1927,123 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       };
     }, [undo, redo, canUndo, canRedo]);
 
+    // STRICT paste handling - BLOCK ALL external paste operations
+    React.useEffect(() => {
+      const handlePaste = (event: ClipboardEvent) => {
+        // Check if the paste event is happening within the editor
+        const editorElement = document.querySelector('.bn-editor') ||
+          document.querySelector('[role="textbox"]') ||
+          document.querySelector('.ProseMirror');
+
+        if (!editorElement || !document.contains(editorElement)) return;
+
+        // Check if the paste target is within the editor
+        const target = event.target as HTMLElement;
+        if (!editorElement.contains(target)) return;
+
+        // ALWAYS block paste operations - no exceptions
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Show notification about blocked paste
+        notifications.show({
+          title: '🚫 Paste Diblokir',
+          message: 'Copy-paste dari sumber eksternal tidak diizinkan. Gunakan fitur AI untuk menghasilkan konten.',
+          color: 'red',
+          icon: <IconAlertTriangle size={16} />,
+          autoClose: 5000,
+        });
+
+        return false;
+      };
+
+      // Also block keyboard shortcuts for paste
+      const handleKeyDown = (event: KeyboardEvent) => {
+        const editorElement = document.querySelector('.bn-editor') ||
+          document.querySelector('[role="textbox"]') ||
+          document.querySelector('.ProseMirror');
+
+        if (!editorElement || !document.contains(editorElement)) return;
+
+        const target = event.target as HTMLElement;
+        if (!editorElement.contains(target)) return;
+
+        // Block Ctrl+V and Cmd+V
+        const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+        if (isCtrlOrCmd && event.key.toLowerCase() === 'v') {
+          event.preventDefault();
+          event.stopPropagation();
+
+          notifications.show({
+            title: '🚫 Paste Diblokir',
+            message: 'Shortcut paste tidak diizinkan. Gunakan fitur AI untuk menghasilkan konten.',
+            color: 'red',
+            icon: <IconAlertTriangle size={16} />,
+            autoClose: 3000,
+          });
+
+          return false;
+        }
+      };
+
+      // Block drag and drop text operations
+      const handleDrop = (event: DragEvent) => {
+        const editorElement = document.querySelector('.bn-editor') ||
+          document.querySelector('[role="textbox"]') ||
+          document.querySelector('.ProseMirror');
+
+        if (!editorElement || !document.contains(editorElement)) return;
+
+        const target = event.target as HTMLElement;
+        if (editorElement.contains(target)) {
+          // Check if this is text being dropped
+          const droppedText = event.dataTransfer?.getData('text/plain');
+          if (droppedText && droppedText.trim().length > 0) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            notifications.show({
+              title: '🚫 Drop Diblokir',
+              message: 'Drag & drop teks tidak diizinkan. Gunakan fitur AI untuk menghasilkan konten.',
+              color: 'red',
+              icon: <IconAlertTriangle size={16} />,
+              autoClose: 3000,
+            });
+
+            return false;
+          }
+        }
+      };
+
+      const handleDragOver = (event: DragEvent) => {
+        const editorElement = document.querySelector('.bn-editor') ||
+          document.querySelector('[role="textbox"]') ||
+          document.querySelector('.ProseMirror');
+
+        if (!editorElement || !document.contains(editorElement)) return;
+
+        const target = event.target as HTMLElement;
+        if (editorElement.contains(target)) {
+          // Prevent default to allow drop, but we'll handle it in handleDrop
+          event.preventDefault();
+        }
+      };
+
+      // Add event listeners with high priority
+      document.addEventListener('paste', handlePaste, true);
+      document.addEventListener('keydown', handleKeyDown, true);
+      document.addEventListener('drop', handleDrop, true);
+      document.addEventListener('dragover', handleDragOver, true);
+
+      return () => {
+        document.removeEventListener('paste', handlePaste, true);
+        document.removeEventListener('keydown', handleKeyDown, true);
+        document.removeEventListener('drop', handleDrop, true);
+        document.removeEventListener('dragover', handleDragOver, true);
+      };
+    }, []);
+
+
     // Enhanced imperative handle with undo/redo
     useImperativeHandle(ref, () => ({
       getEditor: () => editor,
@@ -2558,6 +2675,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
 
     // Enhanced AI Generation with progress
     const handleAIGenerationWithProgress = async (userPrompt: string = "", type: string = "structure", behavior: string = "rewrite") => {
+
       // Allow mock generation even without API key for development
       console.log("🚀 Starting AI generation with progress:", { userPrompt, type, behavior, hasModel: !!aiModel });
 
@@ -3235,6 +3353,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
         });
         return;
       }
+
 
       // Hide popup and start streaming
       setInlineAIState(prev => ({ ...prev, isVisible: false }));
@@ -4306,6 +4425,7 @@ Dalam perspective yang lebih luas, ${prompt} telah menjadi focal point berbagai 
 
     // AI Generation function - Updated with behavior parameter
     const generateAIContent = async (prompt: string, type: string = "structure") => {
+
       if (!aiModel) {
         console.log("⚠️ AI Model not available, using mock response for testing");
         // Silently fallback to mock response - no notification needed
