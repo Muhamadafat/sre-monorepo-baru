@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build --no-lint",
     "lint": "next lint",
-    "start:brain": "next start -p 6002"
+    "start:brain": "next start -p 3001"
   },
   "dependencies": {
     "@citation-js/core": "^0.7.18",

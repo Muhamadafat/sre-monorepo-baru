@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "lint": "next lint",
-    "start:main": "next start -p 6100"
+    "start:main": "next start -p 3000"
   },
   "dependencies": {
     "@mantine/modals": "^8.1.3",

@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build --no-lint",
     "lint": "next lint",
-    "start:writer": "next start -p 6003"
+    "start:writer": "next start -p 3003"
   },
   "dependencies": {
     "@ai-sdk/google": "^1.2.22",

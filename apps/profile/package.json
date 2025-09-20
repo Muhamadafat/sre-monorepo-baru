@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build --no-lint",
     "lint": "next lint",
-    "start:profile": "next start -p 6001"
+    "start:profile": "next start -p 3002"
   },
   "dependencies": {
     "@mantine/form": "^8.2.1",
