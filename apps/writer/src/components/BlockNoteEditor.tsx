@@ -112,6 +112,7 @@ interface SavedCursorPosition {
 interface BlockNoteEditorRef {
   getContent: () => Block[];
   getEditor: () => BlockNoteEditor;
+  setContent: (content: Block[]) => void;
   insertCitation: (citationText: string) => void;
   undo: () => void;
   redo: () => void;
@@ -2048,6 +2049,40 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     useImperativeHandle(ref, () => ({
       getEditor: () => editor,
       getContent: () => editor.document,
+      setContent: (content: Block[]) => {
+        if (editor && content && Array.isArray(content)) {
+          console.log('🔄 SETTING EDITOR CONTENT:', content.length, 'blocks');
+          console.log('🔍 First block structure:', content[0]);
+          try {
+            // Validate content structure before setting
+            const validatedContent = content.map(block => {
+              if (!block.type) {
+                throw new Error(`Block missing type: ${JSON.stringify(block)}`);
+              }
+              return block;
+            });
+
+            editor.replaceBlocks(editor.document, validatedContent as Block[]);
+            console.log('✅ Editor content updated successfully');
+          } catch (error) {
+            console.error('❌ Error setting editor content:', error);
+            console.error('❌ Content that failed:', JSON.stringify(content, null, 2));
+
+            // Fallback: set empty paragraph
+            try {
+              editor.replaceBlocks(editor.document, [{
+                type: "paragraph",
+                content: ""
+              }] as Block[]);
+              console.log('✅ Fallback to empty content successful');
+            } catch (fallbackError) {
+              console.error('❌ Even fallback failed:', fallbackError);
+            }
+          }
+        } else {
+          console.warn('⚠️ Invalid content provided to setContent:', content);
+        }
+      },
       insertCitation: (citationText: string) => {
         if (citationText) {
           // Format citation text

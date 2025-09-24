@@ -180,6 +180,7 @@ interface HistoryItem {
   version: string; // Versi dokumen ("Versi 1", "Versi 2", "Final")
   type: "draft" | "final"; // Tipe penyimpanan: draft atau final submission
   assignmentCode?: string; // Kode assignment dari dosen (untuk final submission)
+  draftId?: string; // ID draft untuk loading content (hanya untuk draft)
 }
 
 interface AICheckResult {
@@ -693,13 +694,14 @@ export default function Home() {
           timestamp: new Date(draft.createdAt),
           wordCount: draft.sections.reduce((total: number, section: any) => {
             return (
-              total + 
+              total +
               (section.content?.split(/\s+/).filter(Boolean).length || 0)
             );
           }, 0),
           title: draft.title,
           version: `Versi ${result.drafts.length - index}`,
-          type: "draft" as const
+          type: "draft" as const,
+          draftId: draft.id
         }));
 
         setHistory(historyItems);
@@ -711,7 +713,47 @@ export default function Home() {
     }
   };
 
-  
+  // Function to load specific draft content
+  const loadDraftContent = async (draftId: string) => {
+    if (!draftId) return;
+
+    try {
+      console.log('Loading draft content for ID:', draftId);
+
+      const response = await fetch(`/api/draft/get?draftId=${draftId}`);
+      const result = await response.json();
+
+      if (response.ok && result.editorContent) {
+        // Use editor ref to set content directly to the editor
+        if (editorRef.current) {
+          editorRef.current.setContent(result.editorContent);
+          console.log('Draft content loaded successfully:', result.editorContent.length, 'blocks');
+        } else {
+          // Fallback to state if ref not available
+          setEditorContent(result.editorContent);
+          console.log('Draft content loaded successfully (fallback):', result.editorContent.length, 'blocks');
+        }
+
+        // Show notification
+        notifications.show({
+          title: "Artikel Dimuat",
+          message: `"${result.draft.title}" berhasil dimuat ke editor.`,
+          color: "blue",
+          position: "top-right",
+        });
+      } else {
+        throw new Error(result.message || 'Failed to load draft');
+      }
+    } catch (error) {
+      console.error('Error loading draft content:', error);
+      notifications.show({
+        title: "Error",
+        message: "Gagal memuat artikel dari riwayat.",
+        color: "red",
+        position: "top-right",
+      });
+    }
+  };
 
 useEffect(() => {
     if (sessionId) {
@@ -4848,6 +4890,12 @@ Ringkasan dari pembahasan ${draftTitle.toLowerCase()} beserta rekomendasi untuk 
                                           computedColorScheme === "dark"
                                             ? "#1e1e1e"
                                             : "#fff",
+                                        cursor: item.type === "draft" && item.draftId ? "pointer" : "default",
+                                      }}
+                                      onClick={() => {
+                                        if (item.type === "draft" && item.draftId) {
+                                          loadDraftContent(item.draftId);
+                                        }
                                       }}
                                     >
                                       <Group justify="space-between" align="flex-start">
@@ -6304,6 +6352,12 @@ ${topic} merupakan skill yang sangat valuable dalam dunia teknologi modern. Deng
                                       computedColorScheme === "dark"
                                         ? "#1e1e1e"
                                         : "#fff",
+                                    cursor: item.type === "draft" && item.draftId ? "pointer" : "default",
+                                  }}
+                                  onClick={() => {
+                                    if (item.type === "draft" && item.draftId) {
+                                      loadDraftContent(item.draftId);
+                                    }
                                   }}
                                 >
                                   <Group justify="space-between" align="flex-start">
