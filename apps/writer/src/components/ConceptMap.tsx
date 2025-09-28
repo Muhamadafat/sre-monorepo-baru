@@ -34,9 +34,11 @@ interface MapNode {
 
 interface ConceptMapProps {
   onGenerateToEditor: (nodes: MapNode[], edges: any[]) => void;
+  initialData?: { nodes: MapNode[], edges: any[] };
+  onDataChange?: (nodes: MapNode[], edges: any[]) => void;
 }
 
-const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor }) => {
+const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor, initialData, onDataChange }) => {
   const visJsRef = useRef<HTMLDivElement>(null);
   const networkInstance = useRef<Network | null>(null);
   const [nodes, setNodes] = useState(new DataSet<MapNode>([]));
@@ -58,6 +60,52 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor }) => {
 
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
+
+  // Load initial data when component mounts or initialData changes
+  useEffect(() => {
+    console.log("=== CONCEPT MAP DATA LOADING ===");
+    console.log("initialData:", initialData);
+    console.log("Has nodes:", initialData?.nodes?.length || 0);
+    console.log("Has edges:", initialData?.edges?.length || 0);
+
+    if (initialData && (initialData.nodes.length > 0 || initialData.edges.length > 0)) {
+      console.log("Loading initial concept map data:", initialData);
+
+      // Don't clear if we already have the same data
+      const currentNodes = nodes.get();
+      const currentEdges = edges.get();
+
+      console.log("Current nodes:", currentNodes.length);
+      console.log("Current edges:", currentEdges.length);
+
+      // Only reload if data is different
+      if (currentNodes.length !== initialData.nodes.length ||
+          currentEdges.length !== initialData.edges.length) {
+
+        console.log("Data is different, reloading...");
+
+        // Clear existing data first
+        nodes.clear();
+        edges.clear();
+
+        // Add initial data
+        if (initialData.nodes.length > 0) {
+          nodes.add(initialData.nodes);
+          console.log("Added", initialData.nodes.length, "nodes");
+        }
+        if (initialData.edges.length > 0) {
+          edges.add(initialData.edges);
+          console.log("Added", initialData.edges.length, "edges");
+        }
+
+        console.log("Initial data loaded successfully");
+      } else {
+        console.log("Data is same, skipping reload");
+      }
+    } else {
+      console.log("No initial data to load");
+    }
+  }, [initialData]);
 
   const getNodeStyle = (type: 'H1' | 'H2_H4' | 'Paragraph') => {
     switch (type) {
@@ -106,6 +154,15 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor }) => {
     };
 
     nodes.add(newNode);
+
+    // Auto-save to parent after adding node
+    if (onDataChange) {
+      setTimeout(() => {
+        const currentNodes = nodes.get();
+        const currentEdges = edges.get();
+        onDataChange(currentNodes, currentEdges);
+      }, 100);
+    }
 
     closeNodeCreation();
     setNodeTitle('');
@@ -163,6 +220,15 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor }) => {
 
         if (selectedEdges.length > 0) {
           edges.remove(selectedEdges);
+        }
+
+        // Auto-save after deletion
+        if (onDataChange) {
+          setTimeout(() => {
+            const currentNodes = nodes.get();
+            const currentEdges = edges.get();
+            onDataChange(currentNodes, currentEdges);
+          }, 100);
         }
 
         setActiveMode('none');
@@ -318,6 +384,15 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor }) => {
     };
 
     nodes.update(updatedNode);
+
+    // Auto-save after updating node
+    if (onDataChange) {
+      setTimeout(() => {
+        const currentNodes = nodes.get();
+        const currentEdges = edges.get();
+        onDataChange(currentNodes, currentEdges);
+      }, 100);
+    }
 
     closeEditNode();
     closeNodeView();

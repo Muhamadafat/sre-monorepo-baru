@@ -2279,6 +2279,15 @@ const handleSubmitToTeacher = async () => {
   // State for outline panel collapse/expand
   const [isOutlineCollapsed, setIsOutlineCollapsed] = useState(false);
 
+  // State to persist concept map data
+  const [conceptMapData, setConceptMapData] = useState<{nodes: any[], edges: any[]}>({nodes: [], edges: []});
+
+  // Handler for auto-saving concept map data
+  const handleConceptMapDataChange = (nodes: any[], edges: any[]) => {
+    console.log("Auto-saving concept map data:", { nodes: nodes.length, edges: edges.length });
+    setConceptMapData({ nodes: [...nodes], edges: [...edges] });
+  };
+
   // Function untuk concept map
   const handleGenerateToEditor = (nodes: any[], edges: any[]) => {
     console.log("=== DEBUG GENERATE TO EDITOR ===");
@@ -2294,6 +2303,10 @@ const handleSubmitToTeacher = async () => {
       });
       return;
     }
+
+    // Save concept map data before generating
+    setConceptMapData({ nodes: [...nodes], edges: [...edges] });
+    console.log("Concept map data saved:", { nodes, edges });
 
     // Sort nodes berdasarkan tipe untuk struktur yang lebih baik
     const sortedNodes = [...nodes].sort((a, b) => {
@@ -5320,7 +5333,11 @@ Ringkasan dari pembahasan ${draftTitle.toLowerCase()} beserta rekomendasi untuk 
                   {activeCentralView === 'conceptMap' ? (
                     // Tampilan Peta Konsep
                     <Box style={{ flex: 1, minHeight: 0 }}>
-                      <ConceptMap onGenerateToEditor={handleGenerateToEditor} />
+                      <ConceptMap
+                        onGenerateToEditor={handleGenerateToEditor}
+                        initialData={conceptMapData}
+                        onDataChange={handleConceptMapDataChange}
+                      />
                     </Box>
                   ) : (
                     <>
