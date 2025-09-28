@@ -2,6 +2,7 @@
 
 'use client'
 
+import ConceptMap from '@/components/ConceptMap';
 import dynamic from 'next/dynamic';
 import { notifications } from '@mantine/notifications';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -54,6 +55,7 @@ import {
   Grid,
   RingProgress,
   Progress,
+  SegmentedControl,
 } from "@mantine/core";
 
 import {useDisclosure, useDebouncedCallback, useMediaQuery} from "@mantine/hooks";
@@ -111,6 +113,14 @@ import {
    IconTrendingDown,
    IconEye,
    IconAnalyze,
+   IconAlignLeft,
+   IconChevronUp,
+   IconChevronDown,
+   IconChevronLeft,
+   IconZoom,
+   IconMaximize,
+   IconArrowsMove,
+   IconDownload,
   } from "@tabler/icons-react";
 import classes from '../../../container.module.css';
 // import'/images/LogoSRE_FIX.png'from '../../../imageCollection/LogoSRE_Fix.png';
@@ -297,6 +307,16 @@ export default function Home() {
 
   const [opened, setOpened] = useState(false);
   const [selectedPDF, setSelectedPDF] = useState<string | null>(null);
+
+  // State for node adding functionality
+  const [nodeTypeModalOpened, setNodeTypeModalOpened] = useState(false);
+  const [selectedNodeType, setSelectedNodeType] = useState<'title' | 'subtitle' | 'paragraph' | null>(null);
+  const [nodeText, setNodeText] = useState('');
+  const [nodeDetailModalOpened, setNodeDetailModalOpened] = useState(false);
+  const [selectedNodeDetail, setSelectedNodeDetail] = useState<any>(null);
+
+  // State untuk mengontrol tampilan panel tengah (concept map vs editor)
+  const [activeCentralView, setActiveCentralView] = useState('conceptMap');
 
   const [mcpContext, setMcpContext] = useState<{
     sessionId: string;
@@ -2252,6 +2272,238 @@ const handleSubmitToTeacher = async () => {
     enabled: true,
   });
 
+  // State to store pending content for editor
+  const [pendingEditorContent, setPendingEditorContent] = useState<any[]>([]);
+  const [editorContent, setEditorContent] = useState<any[]>([]);
+
+  // State for outline panel collapse/expand
+  const [isOutlineCollapsed, setIsOutlineCollapsed] = useState(false);
+
+  // Function untuk concept map
+  const handleGenerateToEditor = (nodes: any[], edges: any[]) => {
+    console.log("=== DEBUG GENERATE TO EDITOR ===");
+    console.log("Nodes received:", nodes);
+    console.log("Edges received:", edges);
+    console.log("Number of nodes:", nodes.length);
+
+    if (nodes.length === 0) {
+      notifications.show({
+        title: 'Tidak Ada Data',
+        message: 'Tambahkan node terlebih dahulu di peta konsep sebelum generate ke editor',
+        color: 'orange',
+      });
+      return;
+    }
+
+    // Sort nodes berdasarkan tipe untuk struktur yang lebih baik
+    const sortedNodes = [...nodes].sort((a, b) => {
+      const order = { 'H1': 1, 'H2_H4': 2, 'Paragraph': 3 };
+      return order[a.type] - order[b.type];
+    });
+
+    // Convert setiap node menjadi block
+    const blocks: any[] = [];
+
+    sortedNodes.forEach((node, index) => {
+      switch (node.type) {
+        case 'H1':
+          blocks.push({
+            type: "heading",
+            props: { level: 1 },
+            content: [{ type: "text", text: node.title || node.label.replace(/\.\.\.$/, '') }]
+          });
+          break;
+
+        case 'H2_H4':
+          // Tambah heading
+          const h2Title = node.title ? node.title.split('\n\n')[0] : node.label.split('\n')[0].replace(/^\*|\*$/g, '');
+          blocks.push({
+            type: "heading",
+            props: { level: 2 },
+            content: [{ type: "text", text: h2Title }]
+          });
+
+          // Tambah content jika ada
+          if (node.content && node.content.trim()) {
+            blocks.push({
+              type: "paragraph",
+              content: [{ type: "text", text: node.content }]
+            });
+          }
+          break;
+
+        case 'Paragraph':
+          const paragraphText = node.title || node.label.replace(/\.\.\.$/, '');
+          blocks.push({
+            type: "paragraph",
+            content: [{ type: "text", text: paragraphText }]
+          });
+          break;
+      }
+
+      // Tambah line break kecuali item terakhir
+      if (index < sortedNodes.length - 1) {
+        blocks.push({
+          type: "paragraph",
+          content: [{ type: "text", text: "" }]
+        });
+      }
+    });
+
+    console.log("Generated blocks:", blocks);
+
+    // Store blocks for when editor is mounted
+    setPendingEditorContent(blocks);
+
+    // Switch to editor mode
+    setActiveCentralView('editor');
+
+    notifications.show({
+      title: '✅ Generate Berhasil!',
+      message: `${nodes.length} node berhasil dikonversi ke editor teks`,
+      color: 'green',
+    });
+  };
+
+  // Effect to insert pending content when editor becomes available
+  useEffect(() => {
+    console.log("=== useEffect for pending content ===");
+    console.log("activeCentralView:", activeCentralView);
+    console.log("pendingEditorContent.length:", pendingEditorContent.length);
+    console.log("editorRef.current:", !!editorRef.current);
+
+    if (activeCentralView === 'editor' && pendingEditorContent.length > 0) {
+      const insertPendingContent = () => {
+        console.log("Attempting to insert pending content...");
+        console.log("editorRef.current:", editorRef.current);
+
+        if (editorRef.current) {
+          console.log("Using setContent to replace all content");
+
+          try {
+            // Use setContent method instead of direct editor manipulation
+            editorRef.current.setContent(pendingEditorContent);
+
+            // Clear pending content
+            setPendingEditorContent([]);
+            console.log("Pending content inserted successfully with setContent");
+          } catch (error) {
+            console.error("Error inserting pending content with setContent:", error);
+
+            // Fallback: try with editor directly
+            const editor = editorRef.current.getEditor();
+            if (editor) {
+              try {
+                editor.replaceBlocks(editor.document, pendingEditorContent);
+                setPendingEditorContent([]);
+                console.log("Pending content inserted successfully with fallback");
+              } catch (fallbackError) {
+                console.error("Fallback insertion also failed:", fallbackError);
+              }
+            }
+          }
+        } else {
+          console.log("editorRef.current is null, retrying...");
+          setTimeout(insertPendingContent, 300);
+        }
+      };
+
+      setTimeout(insertPendingContent, 500); // Increased delay
+    }
+  }, [activeCentralView, pendingEditorContent]);
+
+  // Effect to save content when switching from editor to concept map
+  useEffect(() => {
+    if (activeCentralView === 'conceptMap' && editorRef.current) {
+      // Save current editor content before switching away
+      try {
+        const currentContent = editorRef.current.getContent();
+        console.log("Saving current editor content before switching to concept map:", currentContent);
+        setEditorContent(currentContent); // Store in state
+      } catch (error) {
+        console.error("Error saving editor content:", error);
+      }
+    }
+  }, [activeCentralView]);
+
+  // Effect to restore content when switching back to editor (if no pending content)
+  useEffect(() => {
+    if (activeCentralView === 'editor' && pendingEditorContent.length === 0 && editorContent.length > 0 && editorRef.current) {
+      const restoreContent = () => {
+        try {
+          console.log("Restoring previous editor content:", editorContent);
+          editorRef.current?.setContent(editorContent);
+        } catch (error) {
+          console.error("Error restoring editor content:", error);
+        }
+      };
+
+      setTimeout(restoreContent, 300);
+    }
+  }, [activeCentralView, editorContent, pendingEditorContent.length]);
+
+  // Node management handlers
+  const handleNodeTypeSelection = (type: 'title' | 'subtitle' | 'paragraph') => {
+    setSelectedNodeType(type);
+    setNodeText(''); // Reset text
+    setNodeTypeModalOpened(true);
+  };
+
+  const handleAddNode = () => {
+    if (!nodeText.trim() || !selectedNodeType) return;
+
+    const editor = editorRef.current?.getEditor();
+    if (!editor) return;
+
+    // Limit node text length to keep it short
+    const maxLength = selectedNodeType === 'title' ? 50 : selectedNodeType === 'subtitle' ? 70 : 100;
+    const truncatedText = nodeText.length > maxLength ?
+      nodeText.substring(0, maxLength) + '...' : nodeText;
+
+    let blockType = 'paragraph';
+    let props = {};
+
+    switch (selectedNodeType) {
+      case 'title':
+        blockType = 'heading';
+        props = { level: 1 };
+        break;
+      case 'subtitle':
+        blockType = 'heading';
+        props = { level: 2 };
+        break;
+      case 'paragraph':
+        blockType = 'paragraph';
+        props = {};
+        break;
+    }
+
+    editor.insertBlocks([
+      {
+        type: blockType,
+        props,
+        content: truncatedText,
+      }
+    ], editor.getTextCursorPosition().block, "after");
+
+    // Close modal and reset
+    setNodeTypeModalOpened(false);
+    setNodeText('');
+    setSelectedNodeType(null);
+
+    notifications.show({
+      title: "✅ Node Added",
+      message: `${selectedNodeType} node has been added to the document`,
+      color: "green",
+      autoClose: 2000,
+    });
+  };
+
+  const handleNodeClick = (nodeData: any) => {
+    setSelectedNodeDetail(nodeData);
+    setNodeDetailModalOpened(true);
+  };
+
   // Additional editor shortcuts
   useKeyboardShortcuts({
     enabled: true,
@@ -2972,7 +3224,6 @@ const handleSubmitToTeacher = async () => {
   // Enhanced headings state dengan level
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<string[]>([]);
-  const [editorContent, setEditorContent] = useState<any[]>([]);
 
   // Function to navigate to specific heading in editor
   const navigateToHeading = (headingId: string, headingText: string) => {
@@ -3346,8 +3597,8 @@ const handleSubmitToTeacher = async () => {
                 padding: '20px', // Padding lebih besar
                 display: 'flex',
                 flexDirection: 'column',
-                maxHeight: 'calc(100vh - 140px)',
-                overflowY: 'hidden', // Ubah ke hidden untuk container utama
+                height: 'calc(100vh - 140px)', // Gunakan height tetap
+                overflow: 'hidden', // Hidden untuk container utama
                 boxSizing: "border-box",
                 boxShadow: computedColorScheme === 'dark' 
                   ? '0 4px 20px rgba(0, 0, 0, 0.3)' 
@@ -3355,57 +3606,79 @@ const handleSubmitToTeacher = async () => {
               }}
             >
               <Box mb="lg">
-                <Group align="center" gap="sm" mb="md">
-                  <Box
+                <Group align="center" justify="space-between" mb="md">
+                  <Group align="center" gap="sm">
+                    <Box
+                      style={{
+                        background: 'linear-gradient(135deg, #007BFF, #0056b3)',
+                        borderRadius: '8px',
+                        padding: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <IconFileText size={18} color="white" />
+                    </Box>
+                    <Text size="md" fw={700} c={computedColorScheme === 'dark' ? '#ffffff' : '#1a1b1e'}>
+                      Outline Artikel
+                    </Text>
+                  </Group>
+
+                  <ActionIcon
+                    variant="subtle"
+                    size="sm"
+                    onClick={() => setIsOutlineCollapsed(!isOutlineCollapsed)}
                     style={{
-                      background: 'linear-gradient(135deg, #007BFF, #0056b3)',
-                      borderRadius: '8px',
-                      padding: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      borderRadius: '6px',
+                      transition: 'all 0.2s ease',
                     }}
                   >
-                    <IconFileText size={18} color="white" />
-                  </Box>
-                  <Text size="md" fw={700} c={computedColorScheme === 'dark' ? '#ffffff' : '#1a1b1e'}>
-                    Outline Artikel
-                  </Text>
+                    {isOutlineCollapsed ? (
+                      <IconChevronDown size={16} />
+                    ) : (
+                      <IconChevronUp size={16} />
+                    )}
+                  </ActionIcon>
                 </Group>
 
                 {/* Title Input dengan styling yang diperbaiki */}
-                <TextInput
-                  value={isClient ? fileName : ""}
-                  onChange={(e) => setFileName(e.currentTarget.value)}
-                  variant="filled"
-                  size="md"
-                  placeholder="Judul artikel..."
-                  suppressHydrationWarning={true}
-                  styles={{
-                    input: {
-                      fontWeight: 600,
-                      fontSize: '16px',
-                      padding: '12px 16px',
-                      borderRadius: '10px',
-                      backgroundColor: computedColorScheme === 'dark' ? '#2d3748' : '#f8f9fa',
-                      border: `1px solid ${computedColorScheme === 'dark' ? '#4a5568' : '#dee2e6'}`,
-                      color: computedColorScheme === 'dark' ? '#ffffff' : '#1a1b1e',
-                      transition: 'all 0.2s ease',
-                      '&:focus': {
-                        borderColor: '#007BFF',
-                        backgroundColor: computedColorScheme === 'dark' ? '#1a202c' : '#ffffff',
-                      }
-                    },
-                  }}
-                />
+                {!isOutlineCollapsed && (
+                  <TextInput
+                    value={isClient ? fileName : ""}
+                    onChange={(e) => setFileName(e.currentTarget.value)}
+                    variant="filled"
+                    size="md"
+                    placeholder="Judul artikel..."
+                    suppressHydrationWarning={true}
+                    styles={{
+                      input: {
+                        fontWeight: 600,
+                        fontSize: '16px',
+                        padding: '12px 16px',
+                        borderRadius: '10px',
+                        backgroundColor: computedColorScheme === 'dark' ? '#2d3748' : '#f8f9fa',
+                        border: `1px solid ${computedColorScheme === 'dark' ? '#4a5568' : '#dee2e6'}`,
+                        color: computedColorScheme === 'dark' ? '#ffffff' : '#1a1b1e',
+                        transition: 'all 0.2s ease',
+                        '&:focus': {
+                          borderColor: '#007BFF',
+                          backgroundColor: computedColorScheme === 'dark' ? '#1a202c' : '#ffffff',
+                        }
+                      },
+                    }}
+                  />
+                )}
               </Box>
 
               {/* Container untuk headings dengan scroll yang tepat */}
-              <Box style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <ScrollArea 
-                  style={{ 
+              {!isOutlineCollapsed && (
+                <Box style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <ScrollArea
+                  style={{
                     flex: 1,
                     paddingRight: '8px', // Space untuk scrollbar
+                    minHeight: 0, // Memungkinkan ScrollArea mengecil
                   }}
                   scrollbarSize={6}
                   scrollHideDelay={500}
@@ -3495,8 +3768,9 @@ const handleSubmitToTeacher = async () => {
                         return (
                           <Box
                             key={id}
-                            style={{ 
+                            style={{
                               marginLeft: indentation,
+                              cursor: 'pointer',
                               maxWidth: `calc(100% - ${indentation}px)`,
                             }}
                           >
@@ -3515,7 +3789,15 @@ const handleSubmitToTeacher = async () => {
                                   backgroundColor: config.bgColor,
                                 }
                               }}
-                              onClick={() => navigateToHeading(id, text)}
+                              onClick={(e) => {
+                                if (e.ctrlKey || e.metaKey) {
+                                  // Show detail modal when Ctrl+Click
+                                  handleNodeClick({ id, text, level });
+                                } else {
+                                  // Navigate to heading normally
+                                  navigateToHeading(id, text);
+                                }
+                              }}
                             >
                               <Box style={{ padding: config.padding }}>
                                 <Group gap="sm" align="center" wrap="nowrap">
@@ -3561,7 +3843,9 @@ const handleSubmitToTeacher = async () => {
                     )}
                   </Stack>
                 </ScrollArea>
+
               </Box>
+              )}
 
 {/* <Text size="xs" fw={600} c="dimmed" mb="sm" ml="sm">
                 Daftar Artikel
@@ -3721,7 +4005,8 @@ const handleSubmitToTeacher = async () => {
                             isFromBrainstorming={isFromBrainstorming}
                             nodesData={article} 
                           />
-                          
+
+
                           {/* AI Detection Indicators Overlay */}
                           {showAIIndicators && aiCheckResult && !isScanning && (
                             <Box
@@ -5002,8 +5287,45 @@ Ringkasan dari pembahasan ${draftTitle.toLowerCase()} beserta rekomendasi untuk 
                     boxSizing: "border-box",
                   }}
                 >
-                  
-                  <Box style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+
+                  {/* Toggle untuk switch antara Concept Map dan Editor */}
+                  <Box mb="md">
+                    <SegmentedControl
+                      value={activeCentralView}
+                      onChange={setActiveCentralView}
+                      data={[
+                        {
+                          value: 'conceptMap',
+                          label: (
+                            <Center>
+                              <IconMap2 size={16} />
+                              <Box ml="sm">Peta Konsep</Box>
+                            </Center>
+                          ),
+                        },
+                        {
+                          value: 'editor',
+                          label: (
+                            <Center>
+                              <IconEdit size={16} />
+                              <Box ml="sm">Editor Teks</Box>
+                            </Center>
+                          ),
+                        },
+                      ]}
+                    />
+                  </Box>
+
+                  {/* Tampilkan konten berdasarkan state activeCentralView */}
+                  {activeCentralView === 'conceptMap' ? (
+                    // Tampilan Peta Konsep
+                    <Box style={{ flex: 1, minHeight: 0 }}>
+                      <ConceptMap onGenerateToEditor={handleGenerateToEditor} />
+                    </Box>
+                  ) : (
+                    <>
+                      {/* Tampilan Editor yang sudah ada */}
+                      <Box style={{ flex: 1, overflow: "hidden", position: "relative" }}>
                     {/* BlockNote Editor Component dengan AI Indonesia */}
                     {isClient ? (
                       <BlockNoteEditorComponent
@@ -5036,6 +5358,8 @@ Ringkasan dari pembahasan ${draftTitle.toLowerCase()} beserta rekomendasi untuk 
                         <Text size="sm" c="dimmed">Loading editor...</Text>
                       </Box>
                     )}
+
+
                       {isScanning && (
                         /* Scanning Overlay */
                         <Box
@@ -5100,55 +5424,57 @@ Ringkasan dari pembahasan ${draftTitle.toLowerCase()} beserta rekomendasi untuk 
                           </Stack>
                         </Box>
                       )}
-                  </Box>
+                      </Box>
 
-                  {/* Action Buttons */}
-                  <Group justify="flex-end" mt="sm" gap="md">
-                    <Button 
-                      variant="outline" 
-                      color="blue" 
-                      leftSection={
-                        isScanning ? (
-                          <Loader size={18} color="white" />
-                        ) : (
-                          <IconFileText size={18} />
-                        )
-                      } 
-                      radius="md" 
-                      size="md" 
-                      px={24} 
-                      onClick={handleSaveDraft}
-                      style={{
-                        transition: 'all 0.2s ease',
-                      }}
-                      disabled={isScanning || loading}
-                      loading={loading}
-                    >
-                      {loading ? 'Menyimpan...' : 'Simpan Draft'}
-                    </Button>
+                      {/* Action Buttons - hanya untuk editor mode */}
+                      <Group justify="flex-end" mt="sm" gap="md">
+                        <Button
+                          variant="outline"
+                          color="blue"
+                          leftSection={
+                            isScanning ? (
+                              <Loader size={18} color="white" />
+                            ) : (
+                              <IconFileText size={18} />
+                            )
+                          }
+                          radius="md"
+                          size="md"
+                          px={24}
+                          onClick={handleSaveDraft}
+                          style={{
+                            transition: 'all 0.2s ease',
+                          }}
+                          disabled={isScanning || loading}
+                          loading={loading}
+                        >
+                          {loading ? 'Menyimpan...' : 'Simpan Draft'}
+                        </Button>
 
-                    <Button 
-                      variant="filled" 
-                      color="blue" 
-                      leftSection={
-                        isScanning ? (
-                          <Loader size={18} color="white" />
-                        ) : (
-                          <IconUpload size={18} />
-                        )
-                      } 
-                      radius="md" 
-                      size="md" 
-                      px={24} 
-                      onClick={handleFinalSave}
-                      style={{
-                        transition: 'all 0.2s ease',
-                      }}
-                      disabled={isScanning}
-                    >
-                      {isScanning ? "AI Checker..." : "Simpan Final"}
-                    </Button>
-                  </Group>
+                        <Button
+                          variant="filled"
+                          color="blue"
+                          leftSection={
+                            isScanning ? (
+                              <Loader size={18} color="white" />
+                            ) : (
+                              <IconUpload size={18} />
+                            )
+                          }
+                          radius="md"
+                          size="md"
+                          px={24}
+                          onClick={handleFinalSave}
+                          style={{
+                            transition: 'all 0.2s ease',
+                          }}
+                          disabled={isScanning}
+                        >
+                          {isScanning ? "AI Checker..." : "Simpan Final"}
+                        </Button>
+                      </Group>
+                    </>
+                  )}
                 </Box>
                 {/* Panel Kanan */}
                 <Box
@@ -7330,6 +7656,83 @@ ${topic} merupakan skill yang sangat valuable dalam dunia teknologi modern. Deng
           });
         }}
       />
+
+      {/* Node Text Input Modal */}
+      <Modal
+        opened={nodeTypeModalOpened}
+        onClose={() => setNodeTypeModalOpened(false)}
+        title={`Tambah ${selectedNodeType === 'title' ? 'Judul' : selectedNodeType === 'subtitle' ? 'Sub-Judul' : 'Paragraf'}`}
+        centered
+        size="md"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Masukkan teks untuk {selectedNodeType === 'title' ? 'judul' : selectedNodeType === 'subtitle' ? 'sub-judul' : 'paragraf'} baru:
+          </Text>
+
+          <TextInput
+            placeholder={`Tulis ${selectedNodeType === 'title' ? 'judul' : selectedNodeType === 'subtitle' ? 'sub-judul' : 'paragraf'} di sini...`}
+            value={nodeText}
+            onChange={(e) => setNodeText(e.target.value)}
+            data-autofocus
+            size="md"
+            maxLength={selectedNodeType === 'title' ? 50 : selectedNodeType === 'subtitle' ? 70 : 100}
+          />
+
+          <Text size="xs" c="dimmed">
+            Maksimal {selectedNodeType === 'title' ? '50' : selectedNodeType === 'subtitle' ? '70' : '100'} karakter
+            ({nodeText.length} karakter)
+          </Text>
+
+          <Group justify="space-between" mt="md">
+            <Button variant="light" onClick={() => setNodeTypeModalOpened(false)}>
+              Kembali
+            </Button>
+            <Button
+              onClick={handleAddNode}
+              disabled={!nodeText.trim()}
+              color={selectedNodeType === 'title' ? 'green' : selectedNodeType === 'subtitle' ? 'yellow' : 'gray'}
+            >
+              Tambah {selectedNodeType === 'title' ? 'Judul' : selectedNodeType === 'subtitle' ? 'Sub-Judul' : 'Paragraf'}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Node Detail Modal */}
+      <Modal
+        opened={nodeDetailModalOpened}
+        onClose={() => setNodeDetailModalOpened(false)}
+        title="Detail Node"
+        centered
+        size="lg"
+      >
+        <Stack gap="md">
+          {selectedNodeDetail && (
+            <>
+              <Text size="lg" fw={600}>{selectedNodeDetail.text}</Text>
+              <Badge color="blue" variant="light">
+                Level: H{selectedNodeDetail.level}
+              </Badge>
+              <Text size="sm" c="dimmed">
+                ID: {selectedNodeDetail.id}
+              </Text>
+              <Divider />
+              <Text size="sm">
+                Node ini merupakan {selectedNodeDetail.level === 1 ? 'judul utama' :
+                selectedNodeDetail.level === 2 ? 'sub-judul' : 'heading level ' + selectedNodeDetail.level}
+                dalam struktur artikel Anda.
+              </Text>
+            </>
+          )}
+
+          <Group justify="flex-end" mt="md">
+            <Button variant="light" onClick={() => setNodeDetailModalOpened(false)}>
+              Tutup
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
     </AppShell>
   );
