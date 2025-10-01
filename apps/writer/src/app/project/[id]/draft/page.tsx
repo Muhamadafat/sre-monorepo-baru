@@ -744,15 +744,23 @@ export default function Home() {
       const result = await response.json();
 
       if (response.ok && result.editorContent) {
-        // Use editor ref to set content directly to the editor
-        if (editorRef.current) {
-          editorRef.current.setContent(result.editorContent);
-          console.log('Draft content loaded successfully:', result.editorContent.length, 'blocks');
-        } else {
-          // Fallback to state if ref not available
-          setEditorContent(result.editorContent);
-          console.log('Draft content loaded successfully (fallback):', result.editorContent.length, 'blocks');
-        }
+        // IMPORTANT: Update editorContent state first
+        setEditorContent(result.editorContent);
+        console.log('Draft content loaded to state:', result.editorContent.length, 'blocks');
+
+        // Sync to concept map
+        syncEditorToConceptMap(result.editorContent);
+
+        // Switch to editor view
+        setActiveCentralView('editor');
+
+        // Wait for view to switch, then set content to editor
+        setTimeout(() => {
+          if (editorRef.current) {
+            editorRef.current.setContent(result.editorContent);
+            console.log('Draft content applied to editor:', result.editorContent.length, 'blocks');
+          }
+        }, 100);
 
         // Show notification
         notifications.show({
@@ -2288,6 +2296,98 @@ const handleSubmitToTeacher = async () => {
     setConceptMapData({ nodes: [...nodes], edges: [...edges] });
   };
 
+  // Function to sync editor content to concept map
+  const syncEditorToConceptMap = (content: any[]) => {
+    console.log("🔄 Syncing editor to concept map...", content.length, "blocks");
+
+    const nodes: any[] = [];
+    const edges: any[] = [];
+    let lastNodeId: string | null = null;
+    let yPosition = 50;
+
+    content.forEach((block, index) => {
+      let nodeId = `node-${index}`;
+      let nodeData: any = null;
+
+      if (block.type === "heading") {
+        const level = block.props?.level || 1;
+        // Handle both array and string content
+        const text = Array.isArray(block.content)
+          ? block.content.map((item: any) => item.text || "").join("")
+          : (typeof block.content === "string" ? block.content : "");
+
+        if (text.trim()) {
+          if (level === 1) {
+            // H1 sebagai node utama
+            nodeData = {
+              id: nodeId,
+              label: text.length > 30 ? text.substring(0, 30) + "..." : text,
+              title: text,
+              type: 'H1',
+              x: 400,
+              y: yPosition,
+              font: { size: 20, bold: true },
+              color: { background: '#4A90E2', border: '#2E5C8A' },
+            };
+            yPosition += 120;
+          } else if (level >= 2 && level <= 4) {
+            // H2-H4 sebagai subheading
+            nodeData = {
+              id: nodeId,
+              label: text.length > 50 ? text.substring(0, 50) + "..." : text,
+              title: text,
+              type: 'H2_H4',
+              x: 400,
+              y: yPosition,
+              font: { size: 16, bold: true },
+              color: { background: '#7FB3D5', border: '#5A8DB8' },
+            };
+            yPosition += 100;
+          }
+        }
+      } else if (block.type === "paragraph") {
+        // Handle both array and string content
+        const text = Array.isArray(block.content)
+          ? block.content.map((item: any) => item.text || "").join("")
+          : (typeof block.content === "string" ? block.content : "");
+
+        if (text.trim()) {
+          nodeData = {
+            id: nodeId,
+            label: text.length > 50 ? text.substring(0, 50) + "..." : text,
+            title: text,
+            type: 'Paragraph',
+            x: 400,
+            y: yPosition,
+            font: { size: 14 },
+            color: { background: '#E8F4F8', border: '#B8D4E0' },
+          };
+          yPosition += 80;
+        }
+      }
+
+      // Tambahkan node jika ada data
+      if (nodeData) {
+        nodes.push(nodeData);
+
+        // Buat edge ke node sebelumnya
+        if (lastNodeId) {
+          edges.push({
+            id: `edge-${lastNodeId}-${nodeId}`,
+            from: lastNodeId,
+            to: nodeId,
+            arrows: 'to',
+          });
+        }
+
+        lastNodeId = nodeId;
+      }
+    });
+
+    console.log("✅ Synced to concept map:", nodes.length, "nodes,", edges.length, "edges");
+    setConceptMapData({ nodes, edges });
+  };
+
   // Function untuk concept map
   const handleGenerateToEditor = (nodes: any[], edges: any[]) => {
     console.log("=== DEBUG GENERATE TO EDITOR ===");
@@ -2310,8 +2410,8 @@ const handleSubmitToTeacher = async () => {
 
     // Sort nodes berdasarkan tipe untuk struktur yang lebih baik
     const sortedNodes = [...nodes].sort((a, b) => {
-      const order = { 'H1': 1, 'H2_H4': 2, 'Paragraph': 3 };
-      return order[a.type] - order[b.type];
+      const order: Record<string, number> = { 'H1': 1, 'H2_H4': 2, 'Paragraph': 3 };
+      return (order[a.type] || 0) - (order[b.type] || 0);
     });
 
     // Convert setiap node menjadi block
@@ -2397,6 +2497,11 @@ const handleSubmitToTeacher = async () => {
             // Use setContent method instead of direct editor manipulation
             editorRef.current.setContent(pendingEditorContent);
 
+            // Manually trigger content change to update outline panel
+            setTimeout(() => {
+              handleContentChange(pendingEditorContent);
+            }, 100);
+
             // Clear pending content
             setPendingEditorContent([]);
             console.log("Pending content inserted successfully with setContent");
@@ -2440,20 +2545,22 @@ const handleSubmitToTeacher = async () => {
   }, [activeCentralView]);
 
   // Effect to restore content when switching back to editor (if no pending content)
+  // FIXED: Removed editorContent from dependency to prevent infinite loop
   useEffect(() => {
     if (activeCentralView === 'editor' && pendingEditorContent.length === 0 && editorContent.length > 0 && editorRef.current) {
       const restoreContent = () => {
         try {
-          console.log("Restoring previous editor content:", editorContent);
+          console.log("Restoring previous editor content:", editorContent.length, "blocks");
           editorRef.current?.setContent(editorContent);
         } catch (error) {
           console.error("Error restoring editor content:", error);
         }
       };
 
-      setTimeout(restoreContent, 300);
+      // Only restore if not just loaded from draft (to avoid conflict)
+      setTimeout(restoreContent, 350);
     }
-  }, [activeCentralView, editorContent, pendingEditorContent.length]);
+  }, [activeCentralView, pendingEditorContent.length]); // REMOVED editorContent to fix infinite loop
 
   // Node management handlers
   const handleNodeTypeSelection = (type: 'title' | 'subtitle' | 'paragraph') => {
@@ -3320,7 +3427,7 @@ const handleSubmitToTeacher = async () => {
     const extractedHeadings: { id: string; text: string; level: number }[] = [];
     let firstH1Title = "";
     let hasAnyContent = false;
-        
+
     content.forEach((block, index) => {
       // Check if ada content apapun
       if (block.content && block.content.length > 0) {
@@ -3332,20 +3439,20 @@ const handleSubmitToTeacher = async () => {
           hasAnyContent = true;
         }
       }
-        
+
       if (block.type === "heading" && block.content?.length > 0) {
         const text = block.content.map((item: any) => item.text || "").join("");
         if (text.trim()) {
           const level = block.props?.level || 1;
-          
+
           console.log(`📝 HEADING FOUND - Level ${level}: "${text.trim()}" (ID: ${block.id})`);
-            
+
           extractedHeadings.push({
             id: block.id || `heading-${Math.random().toString(36).substr(2, 9)}`,
             text: text.trim(),
             level: level,
           });
-            
+
           // Auto-update fileName dengan H1 pertama yang ditemukan
           if (level === 1 && !firstH1Title) {
               firstH1Title = text.trim();
@@ -3355,31 +3462,39 @@ const handleSubmitToTeacher = async () => {
     });
 
     console.log('🗂️ OUTLINE UPDATE - Extracted headings:', extractedHeadings);
-    
+
     // IMMEDIATE UPDATE - No delays for outline
     setHeadings(extractedHeadings);
-    
+
     // Force outline panel re-render
     setTimeout(() => {
       console.log('🔄 OUTLINE UPDATE - Forcing panel refresh with', extractedHeadings.length, 'headings');
     }, 50);
-        
+
     // ✅ MODIFICATION: Trigger bibliography sync when content changes
     syncBibliographyWithContent();
+
+    // ✅ Sync editor content to concept map (debounced)
+    const debouncedSync = setTimeout(() => {
+      syncEditorToConceptMap(content);
+    }, 1000);
 
     // Log content changes (debounced to avoid spam)
     const contentText = extractTextFromBlockNote(content);
     const wordCount = contentText.split(/\s+/).filter(Boolean).length;
-    
+
     if (wordCount > 0) {
       // Simple debounce - only log if significant change
       const debouncedLog = setTimeout(() => {
         logEdit('Konten diubah', undefined, undefined, wordCount);
       }, 2000);
-      
-      return () => clearTimeout(debouncedLog);
+
+      return () => {
+        clearTimeout(debouncedLog);
+        clearTimeout(debouncedSync);
+      };
     }
-        
+
     // Logic untuk update/reset title
     if (!hasAnyContent) {
       // Jika editor benar-benar kosong, reset title
@@ -3461,21 +3576,21 @@ const handleSubmitToTeacher = async () => {
           >
             <Group align="center" gap="sm" style={{ flexShrink: 0}}>
               <Image
-                // component={NextImage}
                 src='/images/logoSRE_Tulis.png'
-                alt="Logo"
-                width={200}  // Tambahkan ini
-                height={50}  // Tambahkan ini
+                alt="Logo SRE"
+                h={60}
+                w="auto"
                 fit="contain"
+                style={{ objectFit: 'contain' }}
               />
               <div style={{
                 width: '1px',
                 height: '40px',
-                backgroundColor: '#ccc',
+                backgroundColor: computedColorScheme === 'dark' ? '#444' : '#ddd',
                 marginLeft: '10px',
                 marginRight: '10px'
-              }} 
-              /> 
+              }}
+              />
             </Group>
 
             <div style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}>
@@ -3835,14 +3950,17 @@ const handleSubmitToTeacher = async () => {
                                     </Text>
                                   </Box>
                                   
-                                  <Badge 
-                                    size="xs" 
-                                    color={config.color.replace('#', '')}
-                                    variant="light"
-                                    style={{ 
+                                  <Badge
+                                    size="sm"
+                                    variant="filled"
+                                    style={{
                                       flexShrink: 0,
                                       fontSize: '10px',
-                                      fontWeight: 600,
+                                      fontWeight: 700,
+                                      backgroundColor: config.color,
+                                      color: 'white',
+                                      padding: '4px 8px',
+                                      borderRadius: '6px',
                                     }}
                                   >
                                     H{level}

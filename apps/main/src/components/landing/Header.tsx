@@ -45,9 +45,10 @@ export function Header() {
                 <Image
                 src='/images/logoSRE.png'
                 alt="My-SRE Dashboard"
-                height={40}
-                radius="xs"
-                // className={classes.heroImage}
+                h={60}
+                w="auto"
+                fit="contain"
+                style={{ objectFit: 'contain' }}
                 />
             </Box>
             {/* <IconBrain size={32} color="var(--mantine-color-blue-6)" /> */}

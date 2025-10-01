@@ -186,7 +186,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             // createdAt: new Date(),
           },
         });
-        
+
+        if (!process.env.PY_URL) {
+          throw new Error('Python backend tidak tersedia. Sistem analisis dokumen memerlukan konfigurasi backend Python. Hubungi administrator untuk setup PY_URL environment variable.');
+        }
+
         const mcpResponse = await fetch(`${process.env.PY_URL}/mcp`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

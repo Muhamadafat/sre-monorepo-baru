@@ -6,20 +6,11 @@ export async function POST(req: NextRequest){
     try {
         const { context, mode} = await req.json();
 
-          // Forward ke backend Python
-          // for usual
-        // const pythonResponse = await fetch(`${process.env.PY_URL}/api/suggestions`, {
-        //     method: 'POST',
-        //     headers: { 'Content-Type': 'application/json' },
-        //     body: JSON.stringify({
-        //     query: mode,
-        //     context,
-        //     suggestion_type: "input"  // Hardcode untuk input
-        //     }),
-        // });
-
-        // const data = await pythonResponse.json();
-        // return NextResponse.json(data);
+        // Check if Python backend is configured
+        if (!process.env.PY_URL) {
+            // Return empty suggestions if Python backend not configured
+            return NextResponse.json({ suggestions: [] });
+        }
 
         //for mcp
         const pythonResponse = await fetch(`${process.env.PY_URL}/mcp`, {
@@ -45,10 +36,7 @@ export async function POST(req: NextRequest){
 
         const mcpResponse = await pythonResponse.json();
         if (mcpResponse.error){
-            return NextResponse.json(
-                {error: mcpResponse.error.message},
-                {status: 500}
-            );
+            return NextResponse.json({ suggestions: [] });
         }
 
         const result = mcpResponse.result;
@@ -57,12 +45,10 @@ export async function POST(req: NextRequest){
             return NextResponse.json(data);
         }
 
-        return NextResponse.json(
-            {error: "Invalid response format"},
-            {status: 500}
-        )
-    } catch {
-        console.error('Failed');
-        return NextResponse.json({ error: 'failed'}, {status: 500})
+        return NextResponse.json({ suggestions: [] });
+    } catch (error) {
+        console.error('Suggestions API failed:', error);
+        // Return empty suggestions instead of error
+        return NextResponse.json({ suggestions: [] });
     }
 }

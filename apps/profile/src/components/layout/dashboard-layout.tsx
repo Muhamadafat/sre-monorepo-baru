@@ -238,9 +238,10 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
               <Image
                 src="/images/logoSRE_Profile.png"
                 alt="MySRE Logo"
-                height={45}
-                width="auto"
+                h={60}
+                w="auto"
                 fit="contain"
+                style={{ objectFit: 'contain' }}
                 fallbackSrc="/logo-mysre-fallback.png"
               />
             </Group>

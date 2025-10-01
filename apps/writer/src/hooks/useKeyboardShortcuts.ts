@@ -32,11 +32,18 @@ export const useKeyboardShortcuts = ({ shortcuts, enabled = true }: UseKeyboardS
         return;
       }
     } else if (isInEditor) {
-      // Allow more shortcuts in contentEditable editor, but exclude some that conflict with typing
-      const blockedInEditor = []; // We'll allow all shortcuts in editor for now
-      const currentKey = event.key.toLowerCase();
-      if (blockedInEditor.includes(currentKey)) {
+      // IMPORTANT: Don't interfere with normal typing in the editor
+      // Only allow shortcuts with modifier keys (Ctrl/Alt/Shift) to prevent conflicts
+      const hasModifier = event.ctrlKey || event.metaKey || event.altKey || event.shiftKey;
+
+      // If no modifier key is pressed, let BlockNote handle it natively
+      if (!hasModifier) {
         return;
+      }
+
+      // For Enter key specifically, only handle if Ctrl/Cmd is pressed
+      if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey) {
+        return; // Let BlockNote handle Enter key without Ctrl
       }
     }
 
@@ -66,9 +73,10 @@ export const useKeyboardShortcuts = ({ shortcuts, enabled = true }: UseKeyboardS
   useEffect(() => {
     if (!enabled) return;
 
-    document.addEventListener('keydown', handleKeyDown);
+    // Use capture: false to allow editor's native handlers to run first
+    document.addEventListener('keydown', handleKeyDown, false);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown, false);
     };
   }, [handleKeyDown, enabled]);
 

@@ -1,6 +1,5 @@
 "use client";
 
-// import { createGroq } from "@ai-sdk/groq";
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { Block, BlockNoteEditor, PartialBlock, BlockNoteSchema, defaultInlineContentSpecs, defaultStyleSpecs, filterSuggestionItems, InlineContentSchema, StyleSchema, createStyleSpec } from "@blocknote/core";
 import "@blocknote/core/fonts/inter.css";
@@ -509,79 +508,11 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       };
     }, []);
 
-    // Citation styling with keyboard detection
+    // Citation styling - Disabled to prevent cursor issues from innerHTML modification
     React.useEffect(() => {
-      const handleKeyUp = (event: Event) => {
-        const keyEvent = event as KeyboardEvent;
-        if (keyEvent.key === ']') {
-          // When user types ']', check if they just completed a citation
-          setTimeout(() => {
-            const selection = window.getSelection();
-            if (selection && selection.rangeCount > 0) {
-              const range = selection.getRangeAt(0);
-              const textNode = range.startContainer;
-              const text = textNode.textContent || '';
-              
-              // Look for citation pattern ending with the cursor position
-              const cursorPos = range.startOffset;
-              const beforeCursor = text.substring(0, cursorPos);
-              const citationMatch = beforeCursor.match(/\[([^\]]+)\]$/);
-              
-              if (citationMatch && textNode.parentElement) {
-                const parent = textNode.parentElement;
-                const citationText = citationMatch[0];
-                const citationStart = beforeCursor.lastIndexOf(citationText);
-                
-                // Create a styled span to replace the citation
-                const newHTML = text.substring(0, citationStart) + 
-                  `<span class="bn-citation">${citationText}</span>` + 
-                  text.substring(cursorPos);
-                
-                parent.innerHTML = newHTML;
-                
-                // Restore cursor position
-                const newRange = document.createRange();
-                const walker = document.createTreeWalker(
-                  parent,
-                  NodeFilter.SHOW_TEXT,
-                  null
-                );
-                
-                let currentPos = 0;
-                let targetNode = null;
-                let node;
-                
-                while (node = walker.nextNode()) {
-                  const nodeLength = node.textContent?.length || 0;
-                  if (currentPos + nodeLength >= cursorPos) {
-                    targetNode = node;
-                    break;
-                  }
-                  currentPos += nodeLength;
-                }
-                
-                if (targetNode) {
-                  newRange.setStart(targetNode, cursorPos - currentPos);
-                  newRange.collapse(true);
-                  selection.removeAllRanges();
-                  selection.addRange(newRange);
-                }
-              }
-            }
-          }, 50);
-        }
-      };
-
-      const proseMirrorContent = document.querySelector('.ProseMirror');
-      if (proseMirrorContent) {
-        proseMirrorContent.addEventListener('keyup', handleKeyUp);
-      }
-
-      return () => {
-        if (proseMirrorContent) {
-          proseMirrorContent.removeEventListener('keyup', handleKeyUp);
-        }
-      };
+      // Keeping this disabled permanently as it was causing cursor position problems
+      // Citation styling is now handled through CSS only
+      return () => {};
     }, []);
 
     // Enhanced Core states with progress
@@ -686,7 +617,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
     const aiModel = React.useMemo(() => {
       try {
         const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
-        
+
         console.log("🔑 AI Model Setup Debug:");
         console.log("NEXT_PUBLIC_GOOGLE_API_KEY:", process.env.NEXT_PUBLIC_GOOGLE_API_KEY ? "Available" : "Missing");
         console.log("GOOGLE_API_KEY:", process.env.GOOGLE_API_KEY ? "Available" : "Missing");
@@ -697,12 +628,14 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           return null;
         }
 
-        const groq = createGoogleGenerativeAI({
+        const google = createGoogleGenerativeAI({
           apiKey: apiKey,
         });
 
-        const model = groq("gemini-1.5-flash-latest");
-        console.log("✅ AI Model initialized successfully:", !!model);
+        // Use Gemini Pro for reliable responses
+        const model = google("gemini-pro");
+        console.log("✅ AI Model initialized successfully with: gemini-pro");
+
         return model;
       } catch (error) {
         console.error("❌ Error initializing AI model:", error);
@@ -794,144 +727,34 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       },
     });
 
-    // Text formatting shortcuts integration
+    // Text formatting shortcuts integration - COMPLETELY DISABLED FOR TESTING
     useTextFormattingShortcuts({
-      onBold: () => {
-        editor.toggleStyles({ bold: true });
-      },
-      onItalic: () => {
-        editor.toggleStyles({ italic: true });
-      },
-      onUnderline: () => {
-        editor.toggleStyles({ underline: true });
-      },
-      onStrikethrough: () => {
-        editor.toggleStyles({ strike: true });
-      },
-      onCode: () => {
-        editor.toggleStyles({ code: true });
-      },
-      onHeading: (level: number) => {
-        editor.updateBlock(editor.getTextCursorPosition().block, {
-          type: "heading",
-          props: { level },
-        });
-      },
-      onBulletList: () => {
-        editor.updateBlock(editor.getTextCursorPosition().block, {
-          type: "bulletListItem",
-        });
-      },
-      onNumberedList: () => {
-        editor.updateBlock(editor.getTextCursorPosition().block, {
-          type: "numberedListItem",
-        });
-      },
-      onQuote: () => {
-        editor.updateBlock(editor.getTextCursorPosition().block, {
-          type: "paragraph",
-          // @ts-ignore - BlockNote may have different quote implementation
-          props: { backgroundColor: "gray" },
-        });
-      },
-      onLink: () => {
-        // Insert link
-        const selectedText = editor.getSelectedText();
-        if (selectedText) {
-          editor.createLink("https://example.com", selectedText);
-        } else {
-          notifications.show({
-            message: 'Pilih teks terlebih dahulu untuk membuat link',
-            color: 'orange',
-            autoClose: 3000,
-          });
-        }
-      },
-      enabled: true,
+      onBold: () => {},
+      onItalic: () => {},
+      onUnderline: () => {},
+      onStrikethrough: () => {},
+      onCode: () => {},
+      onHeading: (level: number) => {},
+      onBulletList: () => {},
+      onNumberedList: () => {},
+      onQuote: () => {},
+      onLink: () => {},
+      enabled: false, // COMPLETELY DISABLED
     });
 
-    // Editor shortcuts integration
+    // Editor shortcuts integration - COMPLETELY DISABLED FOR TESTING
     useEditorShortcuts({
-      onSearch: () => {
-        setSearchMode('search');
-        openSearchModal();
-      },
-      // Note: onFindReplace handled by useAdvancedShortcuts (Ctrl+H)
-      onGoToLine: () => {
-        openGoToLineModal();
-      },
-      onGoToStart: () => {
-        // Navigate to the beginning of document
-        if (editor?.document && editor.document.length > 0) {
-          const firstBlock = editor.document[0];
-          editor.setTextCursorPosition(firstBlock, "start");
-        }
-      },
-      onGoToEnd: () => {
-        // Navigate to the end of document
-        if (editor?.document && editor.document.length > 0) {
-          const lastBlock = editor.document[editor.document.length - 1];
-          editor.setTextCursorPosition(lastBlock, "end");
-        }
-      },
-      onDuplicateLine: () => {
-        // Duplicate current block
-        try {
-          const currentBlock = editor.getTextCursorPosition().block;
-          const duplicatedBlock = { ...currentBlock, id: undefined };
-          editor.insertBlocks([duplicatedBlock], currentBlock, "after");
-
-          notifications.show({
-            message: 'Baris berhasil diduplikasi',
-            color: 'blue',
-            autoClose: 2000,
-          });
-        } catch (error) {
-          console.error('Error duplicating line:', error);
-          notifications.show({
-            message: 'Gagal menduplikasi baris',
-            color: 'red',
-            autoClose: 3000,
-          });
-        }
-      },
-      onDeleteLine: () => {
-        // Delete current block
-        try {
-          const currentBlock = editor.getTextCursorPosition().block;
-          if (editor.document.length > 1) {
-            editor.removeBlocks([currentBlock]);
-
-            notifications.show({
-              message: 'Baris berhasil dihapus',
-              color: 'blue',
-              autoClose: 2000,
-            });
-          } else {
-            notifications.show({
-              message: 'Tidak dapat menghapus satu-satunya baris',
-              color: 'orange',
-              autoClose: 3000,
-            });
-          }
-        } catch (error) {
-          console.error('Error deleting line:', error);
-          notifications.show({
-            message: 'Gagal menghapus baris',
-            color: 'red',
-            autoClose: 3000,
-          });
-        }
-      },
-      onGenerateAI: () => {
-        // Open AI generation modal
-        openAIModal();
-      },
-      // Note: Tab/Shift+Tab indentation is handled natively by BlockNote editor
-      enabled: true,
+      onSearch: () => {},
+      onGoToLine: () => {},
+      onGoToStart: () => {},
+      onGoToEnd: () => {},
+      onDuplicateLine: () => {},
+      onDeleteLine: () => {},
+      onGenerateAI: () => {},
+      enabled: false, // COMPLETELY DISABLED
     });
 
-    // Advanced shortcuts integration
+    // Advanced shortcuts integration - COMPLETELY DISABLED FOR TESTING
     useAdvancedShortcuts({
       onFindReplace: () => {
         setSearchMode('replace');
@@ -1450,10 +1273,10 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           });
         }
       },
-      enabled: true,
+      enabled: false, // COMPLETELY DISABLED FOR TESTING
     });
 
-    // Draft shortcuts integration
+    // Draft shortcuts integration - COMPLETELY DISABLED FOR TESTING
     useDraftShortcuts({
       onSave: async () => {
         // Implement real save functionality to localStorage
@@ -1509,7 +1332,7 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
           autoClose: 3000,
         });
       },
-      enabled: true,
+      enabled: false, // COMPLETELY DISABLED FOR TESTING
     });
 
     // Search functionality implementation
@@ -1893,155 +1716,16 @@ const BlockNoteEditorComponent = forwardRef<BlockNoteEditorRef, BlockNoteEditorP
       }
     }, [editor, canRedo]);
 
-    // Enhanced keyboard shortcuts for undo/redo
+    // Enhanced keyboard shortcuts for undo/redo - TEMPORARILY DISABLED
     React.useEffect(() => {
-      const handleKeyDown = (event: KeyboardEvent) => {
-        // Check if editor is focused
-        const editorElement = document.querySelector('.bn-editor') ||
-          document.querySelector('[role="textbox"]') ||
-          document.querySelector('.ProseMirror');
-
-        if (!editorElement || !document.contains(editorElement)) return;
-
-        const isCtrlOrCmd = event.ctrlKey || event.metaKey;
-
-        if (isCtrlOrCmd && event.key === 'z' && !event.shiftKey) {
-          event.preventDefault();
-          event.stopPropagation();
-          if (canUndo()) {
-            undo();
-          }
-        } else if (isCtrlOrCmd && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
-          event.preventDefault();
-          event.stopPropagation();
-          if (canRedo()) {
-            redo();
-          }
-        }
-      };
-
-      // Add event listener
-      document.addEventListener('keydown', handleKeyDown, true);
-
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown, true);
-      };
+      // DISABLED - Testing if this causes auto enter
+      return () => {};
     }, [undo, redo, canUndo, canRedo]);
 
-    // STRICT paste handling - BLOCK ALL external paste operations
+    // STRICT paste handling - TEMPORARILY DISABLED
     React.useEffect(() => {
-      const handlePaste = (event: ClipboardEvent) => {
-        // Check if the paste event is happening within the editor
-        const editorElement = document.querySelector('.bn-editor') ||
-          document.querySelector('[role="textbox"]') ||
-          document.querySelector('.ProseMirror');
-
-        if (!editorElement || !document.contains(editorElement)) return;
-
-        // Check if the paste target is within the editor
-        const target = event.target as HTMLElement;
-        if (!editorElement.contains(target)) return;
-
-        // ALWAYS block paste operations - no exceptions
-        event.preventDefault();
-        event.stopPropagation();
-
-        // Show notification about blocked paste
-        notifications.show({
-          title: '🚫 Paste Diblokir',
-          message: 'Copy-paste dari sumber eksternal tidak diizinkan. Gunakan fitur AI untuk menghasilkan konten.',
-          color: 'red',
-          icon: <IconAlertTriangle size={16} />,
-          autoClose: 5000,
-        });
-
-        return false;
-      };
-
-      // Also block keyboard shortcuts for paste
-      const handleKeyDown = (event: KeyboardEvent) => {
-        const editorElement = document.querySelector('.bn-editor') ||
-          document.querySelector('[role="textbox"]') ||
-          document.querySelector('.ProseMirror');
-
-        if (!editorElement || !document.contains(editorElement)) return;
-
-        const target = event.target as HTMLElement;
-        if (!editorElement.contains(target)) return;
-
-        // Block Ctrl+V and Cmd+V
-        const isCtrlOrCmd = event.ctrlKey || event.metaKey;
-        if (isCtrlOrCmd && event.key.toLowerCase() === 'v') {
-          event.preventDefault();
-          event.stopPropagation();
-
-          notifications.show({
-            title: '🚫 Paste Diblokir',
-            message: 'Shortcut paste tidak diizinkan. Gunakan fitur AI untuk menghasilkan konten.',
-            color: 'red',
-            icon: <IconAlertTriangle size={16} />,
-            autoClose: 3000,
-          });
-
-          return false;
-        }
-      };
-
-      // Block drag and drop text operations
-      const handleDrop = (event: DragEvent) => {
-        const editorElement = document.querySelector('.bn-editor') ||
-          document.querySelector('[role="textbox"]') ||
-          document.querySelector('.ProseMirror');
-
-        if (!editorElement || !document.contains(editorElement)) return;
-
-        const target = event.target as HTMLElement;
-        if (editorElement.contains(target)) {
-          // Check if this is text being dropped
-          const droppedText = event.dataTransfer?.getData('text/plain');
-          if (droppedText && droppedText.trim().length > 0) {
-            event.preventDefault();
-            event.stopPropagation();
-
-            notifications.show({
-              title: '🚫 Drop Diblokir',
-              message: 'Drag & drop teks tidak diizinkan. Gunakan fitur AI untuk menghasilkan konten.',
-              color: 'red',
-              icon: <IconAlertTriangle size={16} />,
-              autoClose: 3000,
-            });
-
-            return false;
-          }
-        }
-      };
-
-      const handleDragOver = (event: DragEvent) => {
-        const editorElement = document.querySelector('.bn-editor') ||
-          document.querySelector('[role="textbox"]') ||
-          document.querySelector('.ProseMirror');
-
-        if (!editorElement || !document.contains(editorElement)) return;
-
-        const target = event.target as HTMLElement;
-        if (editorElement.contains(target)) {
-          // Prevent default to allow drop, but we'll handle it in handleDrop
-          event.preventDefault();
-        }
-      };
-
-      // Add event listeners with high priority
-      document.addEventListener('paste', handlePaste, true);
-      document.addEventListener('keydown', handleKeyDown, true);
-      document.addEventListener('drop', handleDrop, true);
-      document.addEventListener('dragover', handleDragOver, true);
-
-      return () => {
-        document.removeEventListener('paste', handlePaste, true);
-        document.removeEventListener('keydown', handleKeyDown, true);
-        document.removeEventListener('drop', handleDrop, true);
-        document.removeEventListener('dragover', handleDragOver, true);
-      };
+      // DISABLED - Testing if this causes auto enter
+      return () => {};
     }, []);
 
 
@@ -4656,8 +4340,17 @@ INSTRUKSI:
         });
 
         return text;
-      } catch (error) {
-        console.error("AI generation failed:", error);
+      } catch (error: any) {
+        console.error("❌ AI generation failed:", error);
+
+        // Show user-friendly error notification
+        notifications.show({
+          title: '❌ AI Generation Error',
+          message: error?.message || 'Gagal generate konten. Coba lagi atau gunakan model AI lain.',
+          color: 'red',
+          autoClose: 5000,
+        });
+
         return null;
       }
     };
@@ -5249,10 +4942,23 @@ INSTRUKSI:
 
     // Handle content changes
     React.useEffect(() => {
+      let isProcessingChange = false;
+      let timeoutId: NodeJS.Timeout;
+
       const handleChange = () => {
-        if (onContentChange) {
-          onContentChange(editor.document);
-        }
+        // Prevent race conditions and rapid-fire onChange calls
+        if (isProcessingChange) return;
+
+        isProcessingChange = true;
+        clearTimeout(timeoutId);
+
+        // Minimal debounce for outline updates (reduced from 100ms to 50ms for faster response)
+        timeoutId = setTimeout(() => {
+          if (onContentChange) {
+            onContentChange(editor.document);
+          }
+          isProcessingChange = false;
+        }, 50); // Faster for real-time outline updates
       };
 
       let unsubscribe: (() => void) | undefined;
@@ -5264,6 +4970,8 @@ INSTRUKSI:
       }
 
       return () => {
+        clearTimeout(timeoutId);
+        isProcessingChange = false;
         if (unsubscribe) {
           unsubscribe();
         }

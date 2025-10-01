@@ -8,7 +8,7 @@ import { DataSet } from 'vis-data/peer';
 import 'vis-network/styles/vis-network.css';
 import {
   Box, useMantineTheme, useMantineColorScheme, Center, Stack, Text,
-  ActionIcon, Group, Tooltip, Modal, TextInput, Textarea, Button, Kbd, Paper, Divider, Badge,
+  ActionIcon, Group, Tooltip, Modal, TextInput, Textarea, Button, Kbd, Paper, Divider, Badge, ColorPicker, ColorInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
@@ -50,6 +50,7 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor, initialData
   const [nodeType, setNodeType] = useState<'H1' | 'H2_H4' | 'Paragraph'>('H1');
   const [nodeTitle, setNodeTitle] = useState('');
   const [nodeContent, setNodeContent] = useState('');
+  const [nodeColor, setNodeColor] = useState<string>('#4ecdc4'); // Default color
   const [selectedNodeData, setSelectedNodeData] = useState<MapNode | null>(null);
   const [editNodeOpened, { open: openEditNode, close: closeEditNode }] = useDisclosure(false);
   const [editNodeTitle, setEditNodeTitle] = useState('');
@@ -147,7 +148,7 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor, initialData
       content: nodeContent,
       type: nodeType,
       shape: 'box',
-      color: getNodeStyle(nodeType),
+      color: { background: nodeColor, border: nodeColor },
       margin: { top: 10, right: 15, bottom: 10, left: 15 },
       borderWidth: 2,
       font: font,
@@ -167,6 +168,7 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor, initialData
     closeNodeCreation();
     setNodeTitle('');
     setNodeContent('');
+    setNodeColor('#4ecdc4'); // Reset to default color
   };
 
   const handleNodeClick = (nodeId: string) => {
@@ -350,6 +352,15 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor, initialData
 
   const handleTypeSelection = (type: 'H1' | 'H2_H4' | 'Paragraph') => {
     setNodeType(type);
+
+    // Set default color based on type
+    const defaultColors = {
+      'H1': '#4ecdc4',
+      'H2_H4': '#f38181',
+      'Paragraph': '#ffffd2'
+    };
+    setNodeColor(defaultColors[type]);
+
     closeTypeSelection();
     openNodeCreation();
   };
@@ -524,6 +535,32 @@ const ConceptMap: React.FC<ConceptMapProps> = ({ onGenerateToEditor, initialData
                     minRows={3}
                 />
             )}
+
+            <Box>
+              <Text size="sm" fw={500} mb="xs">Pilih Warna</Text>
+              <Group gap="xs" mb="md">
+                {['#4ecdc4', '#95e1d3', '#f38181', '#aa96da', '#fcbad3', '#ffffd2', '#a8d8ea', '#ffaaa5'].map((color) => (
+                  <ActionIcon
+                    key={color}
+                    size="lg"
+                    radius="md"
+                    variant={nodeColor === color ? 'filled' : 'light'}
+                    style={{
+                      backgroundColor: color,
+                      border: nodeColor === color ? '3px solid #000' : '2px solid #ddd'
+                    }}
+                    onClick={() => setNodeColor(color)}
+                  />
+                ))}
+              </Group>
+              <ColorInput
+                label="Atau pilih warna custom"
+                value={nodeColor}
+                onChange={setNodeColor}
+                format="hex"
+              />
+            </Box>
+
             <Group justify="flex-end" mt="md">
                 <Button variant="default" onClick={closeNodeCreation}>Batal</Button>
                 <Button onClick={handleAddNode}>Tambah Node</Button>

@@ -130,10 +130,10 @@ export function DashboardHeader({ sidebarOpened, onToggleSidebar, mounted }: Das
               <Image
                 src='/images/logoSRE_IDE.png'
                 alt="My-SRE Logo"
-                width={160}
-                height={50}
+                h={60}
+                w="auto"
                 fit="contain"
-                style={{ alignSelf: "flex-start" }}
+                style={{ objectFit: 'contain', alignSelf: "flex-start" }}
               />
             </Box>
           </Group>
